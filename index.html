@@ -643,11 +643,11 @@
         <button class="icon-btn" onclick="openSettingsModal()">⚙ Manage options</button>
       </div>
       <div class="subtabs">
-        <button class="subtab-btn active" data-sub="manual" onclick="switchSubtab('manual')">Manual entry</button>
-        <button class="subtab-btn" data-sub="scan" onclick="switchSubtab('scan')">Barcode scanner</button>
+        <button class="subtab-btn" data-sub="manual" onclick="switchSubtab('manual')">Manual entry</button>
+        <button class="subtab-btn active" data-sub="scan" onclick="switchSubtab('scan')">Barcode scanner</button>
       </div>
 
-      <div class="subpanel active" data-sub="manual">
+      <div class="subpanel" data-sub="manual">
         <div class="form-grid">
           <div class="field">
             <label>Brand</label>
@@ -695,13 +695,13 @@
         <div class="form-actions"><button class="btn primary" onclick="addManualEntry()">Add to inventory</button></div>
       </div>
 
-      <div class="subpanel" data-sub="scan">
+      <div class="subpanel active" data-sub="scan">
         <div class="mode-row">
-          <button class="mode-btn in active" id="modeInBtn" onclick="setMode('in')">Scan in — box received</button>
-          <button class="mode-btn out" id="modeOutBtn" onclick="setMode('out')">Scan out — opening a spool</button>
+          <button class="mode-btn in" id="modeInBtn" onclick="setMode('in')">Scan in — box received</button>
+          <button class="mode-btn out active" id="modeOutBtn" onclick="setMode('out')">Scan out — opening a spool</button>
         </div>
         <input type="text" id="barcodeInput" placeholder="Scan a barcode, then Enter" autocomplete="off" inputmode="numeric">
-        <p class="scan-hint" id="modeHint">Scanning a known barcode adds one box to that filament's stock. An unrecognized barcode opens a short form to register it once.</p>
+        <p class="scan-hint" id="modeHint">Scanning a known barcode opens one box: moves it from boxed to loose.</p>
       </div>
     </section>
 
@@ -1136,7 +1136,7 @@
 
 <script>
 const STORAGE_KEY = 'filamentLog_v1';
-let currentMode = 'in';
+let currentMode = 'out';
 let currentMaterialFilterFamily = '';
 let selectedSkuIds = new Set();
 let editingSkuId = null;

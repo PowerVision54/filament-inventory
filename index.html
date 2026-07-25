@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
 <title>3D Printer Filament Inventory System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -577,7 +578,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.5</div>
+    <div class="sub">V0.6</div>
   </div>
 </header>
 
@@ -1248,10 +1249,18 @@ function ensureSettingsDefaults(d){
   d.printerLog.forEach(e=>{
     if((e.type==='issue' || e.type==='note') && e.category === undefined) e.category = 'Unknown';
   });
+  // Keep the activity log from growing forever. Analytics only look back 90
+  // days; keep ~13 months so year-over-year CSV exports still work, and the
+  // synced file stays far below GitHub's 1 MB contents-API limit.
+  const eventCutoff = Date.now() - 400*86400000;
+  d.events = d.events.filter(e=>(e.timestamp||0) >= eventCutoff);
+  if(d.events.length > 20000) d.events = d.events.slice(-20000);
 }
 function findSkuByBarcode(code){
   return Object.values(data.skus).find(s => (s.barcodes || []).includes(code));
 }
+const DIRTY_FLAG_KEY = STORAGE_KEY + '_dirty';
+const BASE_KEY = STORAGE_KEY + '_base';
 function loadLocalCache(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -1260,7 +1269,13 @@ function loadLocalCache(){
   return null;
 }
 function saveLocalCache(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){ console.error('Failed to save local cache', e); }
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(DIRTY_FLAG_KEY, ghDirty ? '1' : '0');
+  }catch(e){ console.error('Failed to save local cache', e); }
+}
+function localCacheWasDirty(){
+  try{ return localStorage.getItem(DIRTY_FLAG_KEY) === '1'; }catch(e){ return false; }
 }
 function freshDataSkeleton(){
   const fresh = { skus:{}, events:[], settings:{} };
@@ -1274,12 +1289,22 @@ let ghConfig = {};
 try{ ghConfig = JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || {}; }catch(e){ ghConfig = {}; }
 let ghSha = null;
 let ghDirty = false;
+let ghDirtySince = null;
 let ghSaveTimer = null;
 let ghSaveInFlight = false;
 let ghSaveQueued = false;
 let ghLastSyncedAt = null;
 let ghPollTimer = null;
 let ghCheckingInFlight = false;
+let ghConflictStreak = 0;
+// Snapshot (as a JSON string) of the shared file as of the last successful
+// sync — the "base" for three-way merges when a save conflicts.
+let ghBaseJson = null;
+try{ ghBaseJson = localStorage.getItem(BASE_KEY); }catch(e){}
+function setGhBase(jsonStr){
+  ghBaseJson = jsonStr;
+  try{ localStorage.setItem(BASE_KEY, jsonStr); }catch(e){}
+}
 
 function hasGhConfig(){
   return !!(ghConfig.owner && ghConfig.repo && ghConfig.path && ghConfig.token);
@@ -1316,13 +1341,21 @@ async function ghFetchFile(){
   if(res.status === 401 || res.status === 403){ const err = new Error('GitHub rejected the token'); err.type = 'auth'; throw err; }
   if(!res.ok){ const err = new Error('GitHub error ' + res.status); err.type = 'other'; throw err; }
   const body = await res.json();
+  // GitHub's contents API stops inlining file content at 1 MB. The app keeps
+  // the file well under that by pruning old events, but fail loudly if it happens.
+  if(typeof body.content !== 'string' || (body.content === '' && body.size > 0)){
+    const err = new Error('The data file is too large for the GitHub API (over 1 MB). Export a backup, then clear old history.');
+    err.type = 'other';
+    throw err;
+  }
   const json = JSON.parse(base64ToUtf8(body.content));
   return { json, sha: body.sha };
 }
 async function ghSaveFile(){
+  const payload = JSON.stringify(data);
   const body = {
     message: 'Update inventory data — ' + new Date().toISOString(),
-    content: utf8ToBase64(JSON.stringify(data))
+    content: utf8ToBase64(payload)
   };
   if(ghSha) body.sha = ghSha;
   let res;
@@ -1339,11 +1372,14 @@ async function ghSaveFile(){
   }catch(networkErr){
     const err = new Error('Network error reaching GitHub'); err.type = 'network'; throw err;
   }
-  if(res.status === 409){ const err = new Error('Conflict'); err.type = 'conflict'; throw err; }
+  // 409 = our sha is stale (someone saved first). 422 covers the same race
+  // when we have no sha yet (e.g. two people creating the file at first setup).
+  if(res.status === 409 || res.status === 422){ const err = new Error('Conflict'); err.type = 'conflict'; throw err; }
   if(res.status === 401 || res.status === 403){ const err = new Error('GitHub rejected the token'); err.type = 'auth'; throw err; }
   if(!res.ok){ const err = new Error('GitHub error ' + res.status); err.type = 'other'; throw err; }
   const respBody = await res.json();
   ghSha = respBody.content.sha;
+  setGhBase(payload);
 }
 function setSyncIndicatorState(state, label){
   const wrap = document.getElementById('syncIndicator');
@@ -1384,10 +1420,15 @@ function updateSyncStatusUI(){
 }
 function saveData(){
   ghDirty = true;
+  if(!ghDirtySince) ghDirtySince = Date.now();
   saveLocalCache();
   updateSyncStatusUI();
   clearTimeout(ghSaveTimer);
-  ghSaveTimer = setTimeout(flushGithubSave, 2500);
+  // Debounce rapid actions, but never let a busy stretch (e.g. a long scanning
+  // session) postpone the sync indefinitely — flush at most 10s after the
+  // first unsaved change.
+  const waited = Date.now() - ghDirtySince;
+  ghSaveTimer = setTimeout(flushGithubSave, waited > 10000 ? 0 : 2500);
 }
 async function flushGithubSave(){
   if(!hasGhConfig()) return;
@@ -1397,7 +1438,10 @@ async function flushGithubSave(){
   try{
     await ghSaveFile();
     ghDirty = false;
+    ghDirtySince = null;
+    ghConflictStreak = 0;
     ghLastSyncedAt = Date.now();
+    saveLocalCache();
   }catch(err){
     if(err.type === 'conflict'){
       await handleSyncConflict();
@@ -1437,15 +1481,137 @@ async function ghConditionalCheck(){
   return null;
 }
 function applyFreshRemoteData(remote, message){
+  setGhBase(JSON.stringify(remote.json));
   data = remote.json;
   ghSha = remote.sha;
   ghDirty = false;
+  ghDirtySince = null;
+  ghConflictStreak = 0;
   ensureSettingsDefaults(data);
   saveLocalCache();
   renderAll();
   refreshAllDropdownSources();
   updateSyncStatusUI();
   if(message) toast(message);
+}
+
+/* ---------- Three-way merge (base = last synced, local = this browser, remote = GitHub) ----------
+   Used when a save conflicts because someone else saved first. Instead of
+   throwing away local changes, combine both sides:
+   - log arrays (events / scanLog / printerLog): union by id; entries that were
+     deleted on one side since the base stay deleted; "undone"/"resolved" wins.
+   - sku counts: apply this browser's delta on top of the remote counts.
+   - sku/printer details: whichever side edited most recently wins.
+   - settings lists: union.                                                  */
+function mergeLogArrays(baseArr, localArr, remoteArr, preferFlag){
+  const baseIds = new Set((baseArr||[]).map(x=>x.id));
+  const localIds = new Set((localArr||[]).map(x=>x.id));
+  const byId = new Map();
+  (remoteArr||[]).forEach(x=>byId.set(x.id, x));
+  (localArr||[]).forEach(x=>{
+    const r = byId.get(x.id);
+    if(!r){
+      if(!baseIds.has(x.id)) byId.set(x.id, x); // new locally; if in base it was deleted remotely
+      return;
+    }
+    if(preferFlag && x[preferFlag] && !r[preferFlag]) byId.set(x.id, x);
+  });
+  return [...byId.values()]
+    .filter(x=> localIds.has(x.id) || !baseIds.has(x.id)) // drop entries deleted locally
+    .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+}
+function mergeData(base, local, remote){
+  const merged = JSON.parse(JSON.stringify(remote));
+  ensureSettingsDefaults(merged);
+  const b = base || {};
+  const bSkus = b.skus || {};
+  const bPrinters = b.printers || {};
+  const localSkus = local.skus || {};
+
+  merged.events = mergeLogArrays(b.events, local.events, merged.events);
+  merged.scanLog = mergeLogArrays(b.scanLog, local.scanLog, merged.scanLog, 'undone').slice(-20);
+  merged.printerLog = mergeLogArrays(b.printerLog, local.printerLog, merged.printerLog, 'resolved');
+
+  // Skus deleted locally since the base: deletion wins unless the remote
+  // copy was edited after our base (edit beats delete).
+  Object.keys(merged.skus).forEach(id=>{
+    if(bSkus[id] && !localSkus[id]){
+      if((merged.skus[id].updatedAt||0) <= (bSkus[id].updatedAt||0)) delete merged.skus[id];
+    }
+  });
+  Object.values(localSkus).forEach(ls=>{
+    const rs = merged.skus[ls.id];
+    const bs = bSkus[ls.id];
+    if(!rs){
+      if(!bs){ merged.skus[ls.id] = ls; }                       // created locally
+      else if((ls.updatedAt||0) > (bs.updatedAt||0)){ merged.skus[ls.id] = ls; } // deleted remotely but edited locally
+      return;
+    }
+    if(bs){
+      rs.boxCount = Math.max(0, (rs.boxCount||0) + ((ls.boxCount||0) - (bs.boxCount||0)));
+      rs.looseCount = Math.max(0, (rs.looseCount||0) + ((ls.looseCount||0) - (bs.looseCount||0)));
+    } else if((ls.updatedAt||0) > (rs.updatedAt||0)){
+      rs.boxCount = ls.boxCount;
+      rs.looseCount = ls.looseCount;
+    }
+    if((ls.updatedAt||0) > (rs.updatedAt||0)){
+      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location'].forEach(k=>{
+        if(ls[k] !== undefined) rs[k] = ls[k];
+      });
+      rs.updatedAt = ls.updatedAt;
+    }
+    rs.barcodes = [...new Set([...(rs.barcodes||[]), ...(ls.barcodes||[])])];
+  });
+
+  Object.keys(merged.printers).forEach(id=>{
+    if(bPrinters[id] && !(local.printers||{})[id]){
+      if((merged.printers[id].updatedAt||0) <= (bPrinters[id].updatedAt||0)){
+        delete merged.printers[id];
+        merged.printerLog = merged.printerLog.filter(l=>l.printerId !== id);
+      }
+    }
+  });
+  Object.values(local.printers || {}).forEach(lp=>{
+    const rp = merged.printers[lp.id];
+    if(!rp){
+      if(!bPrinters[lp.id]) merged.printers[lp.id] = lp;
+      return;
+    }
+    if((lp.updatedAt||0) > (rp.updatedAt||0)){
+      ['name','status','group','order','lastServicedAt'].forEach(k=>{ if(lp[k] !== undefined) rp[k] = lp[k]; });
+      rp.updatedAt = lp.updatedAt;
+    }
+  });
+
+  const localSettings = local.settings || {};
+  ['brands','materials','issueCategories','printerGroups'].forEach(k=>{
+    const seen = new Set((merged.settings[k]||[]).map(v=>v.toLowerCase()));
+    (localSettings[k]||[]).forEach(v=>{
+      if(!seen.has(v.toLowerCase())){ merged.settings[k].push(v); seen.add(v.toLowerCase()); }
+    });
+  });
+  const seenColors = new Set(merged.settings.colors.map(c=>c.name.toLowerCase()));
+  (localSettings.colors||[]).forEach(c=>{
+    if(!seenColors.has(c.name.toLowerCase())){ merged.settings.colors.push(c); seenColors.add(c.name.toLowerCase()); }
+  });
+
+  ensureSettingsDefaults(merged); // re-sort lists, backfill anything missing
+  return merged;
+}
+function adoptMergedData(remote, merged, message){
+  setGhBase(JSON.stringify(remote.json));
+  data = merged;
+  ghSha = remote.sha;
+  ensureSettingsDefaults(data);
+  ghDirty = true;
+  if(!ghDirtySince) ghDirtySince = Date.now();
+  saveLocalCache();
+  renderAll();
+  refreshAllDropdownSources();
+  updateSyncStatusUI();
+  if(message) toast(message);
+  clearTimeout(ghSaveTimer);
+  ghSaveTimer = setTimeout(flushGithubSave, 800);
 }
 async function preEditRefresh(){
   // Called right before opening anything that edits shared data. If the
@@ -1472,6 +1638,20 @@ async function handleSyncConflict(){
     ghSaveTimer = setTimeout(flushGithubSave, 15000);
     return;
   }
+  ghConflictStreak++;
+  // Normal path: merge both sides automatically, then save the merged result.
+  // The manual "refresh and redo" modal is only a fallback for when merging
+  // itself fails or conflicts keep repeating (something is wrong with sha handling).
+  if(ghConflictStreak <= 3){
+    try{
+      const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
+      const merged = mergeData(base, data, remote.json);
+      adoptMergedData(remote, merged, "Combined your changes with a teammate's");
+      return;
+    }catch(mergeErr){
+      console.error('Automatic sync merge failed, falling back to manual refresh', mergeErr);
+    }
+  }
   pendingFreshRemote = remote;
   document.getElementById('syncBanner').classList.remove('show');
   document.getElementById('syncConflictOverlay').classList.add('open');
@@ -1483,7 +1663,33 @@ async function resolveSyncConflict(){
   pendingFreshRemote = null;
 }
 async function pollGhStaleness(){
-  if(!hasGhConfig() || ghSaveInFlight || ghDirty) return;
+  if(!hasGhConfig() || ghSaveInFlight) return;
+  if(!ghSha){
+    // No sha yet: either we booted offline from the local copy, or the shared
+    // file hasn't been created. Try to reach GitHub and reconcile.
+    if(ghDirty) return; // the pending save will reconcile via its conflict path
+    ghCheckingInFlight = true;
+    updateSyncStatusUI();
+    let remote = null, fetchErr = null;
+    try{ remote = await ghFetchFile(); }catch(e){ fetchErr = e; }
+    ghCheckingInFlight = false;
+    if(remote){
+      if(localCacheWasDirty()){
+        try{
+          const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
+          adoptMergedData(remote, mergeData(base, data, remote.json), 'Reconnected — syncing your offline changes');
+          return;
+        }catch(e){ console.error('Reconnect merge failed', e); }
+      }
+      applyFreshRemoteData(remote, 'Reconnected — loaded the latest shared data');
+    } else if(fetchErr && fetchErr.type === 'missing'){
+      updateSyncStatusUI(); // file simply doesn't exist yet — nothing to do
+    } else {
+      setSyncIndicatorState('error', 'Offline — local copy');
+    }
+    return;
+  }
+  if(ghDirty) return;
   ghCheckingInFlight = true;
   updateSyncStatusUI();
   const result = await ghConditionalCheck();
@@ -1504,6 +1710,13 @@ function stopGhPolling(){
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'hidden'){ stopGhPolling(); }
   else if(hasGhConfig()){ pollGhStaleness(); startGhPolling(); }
+});
+window.addEventListener('beforeunload', (e)=>{
+  if(ghDirty || ghSaveInFlight){
+    flushGithubSave(); // best effort — the confirm dialog usually buys it enough time
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 async function refreshFromGithub(){
   document.getElementById('syncBanner').classList.remove('show');
@@ -1528,6 +1741,7 @@ async function manualGhSync(){
     await flushGithubSave();
     return;
   }
+  if(!ghSha){ await pollGhStaleness(); return; }
   ghCheckingInFlight = true;
   updateSyncStatusUI();
   const result = await ghConditionalCheck();
@@ -1597,18 +1811,53 @@ async function initApp(){
   }
   showGhGate();
   renderGhGateLoading();
+  let startDirty = false;
   try{
     const remote = await ghFetchFile();
-    data = remote.json;
+    const cache = loadLocalCache();
+    if(localCacheWasDirty() && cache){
+      // The last session ended with changes that never reached GitHub
+      // (tab closed too quickly, or offline). Merge them in rather than lose them.
+      try{
+        const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
+        data = mergeData(base, cache, remote.json);
+        startDirty = true;
+      }catch(e){
+        console.error('Could not recover unsynced local changes', e);
+        data = remote.json;
+      }
+    } else {
+      data = remote.json;
+    }
+    setGhBase(JSON.stringify(remote.json));
     ghSha = remote.sha;
   }catch(err){
     if(err.type === 'missing'){
-      data = freshDataSkeleton();
+      const cache = loadLocalCache();
+      if(localCacheWasDirty() && cache){ data = cache; startDirty = true; }
+      else data = freshDataSkeleton();
       ghSha = null;
     } else if(err.type === 'auth'){
       renderGhGateError('GitHub rejected this token. Check it has Contents read/write access to this repo, then reconnect.', true);
       return;
     } else if(err.type === 'network'){
+      // GitHub unreachable — fall back to this browser's local copy and keep
+      // retrying in the background instead of blocking the whole app.
+      const cache = loadLocalCache();
+      if(cache){
+        data = cache;
+        ghSha = null;
+        ensureSettingsDefaults(data);
+        hideGhGate();
+        qSelectedColor = { ...data.settings.colors[0] };
+        updateQColorDisplay();
+        refreshAllDropdownSources();
+        renderAll();
+        setSyncIndicatorState('error', 'Offline — local copy');
+        toast("Couldn't reach GitHub — using this device's last local copy. Will keep retrying.");
+        startGhPolling();
+        return;
+      }
       renderGhGateError('Could not reach GitHub. Check your connection and retry.', true);
       return;
     } else {
@@ -1617,7 +1866,8 @@ async function initApp(){
     }
   }
   ensureSettingsDefaults(data);
-  ghDirty = false;
+  ghDirty = startDirty;
+  if(startDirty && !ghDirtySince) ghDirtySince = Date.now();
   ghLastSyncedAt = Date.now();
   saveLocalCache();
   hideGhGate();
@@ -1627,6 +1877,11 @@ async function initApp(){
   renderAll();
   updateSyncStatusUI();
   startGhPolling();
+  if(startDirty){
+    toast('Recovered unsynced changes from your last session');
+    clearTimeout(ghSaveTimer);
+    ghSaveTimer = setTimeout(flushGithubSave, 800);
+  }
 }
 function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function toast(msg){
@@ -1697,6 +1952,15 @@ function undoScanLogEntry(logId){
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// For values embedded inside a JS string within an inline on* attribute:
+// escape for the JS string first, then for the HTML attribute around it.
+function jsStr(s){
+  return escapeHtml(String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,''));
+}
+// Color hexes come from synced/imported data — only let real hex codes into style attributes.
+function safeHex(h){
+  return /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(h||'')) ? h : '#808080';
+}
 function skuLabel(sku){ return sku.brand + ' ' + sku.material + ' ' + sku.colorName; }
 function normalizeUrl(raw){
   const val = (raw || '').trim();
@@ -1735,6 +1999,10 @@ function ensureListedColor(color){
 function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.tab===tab));
+  if(tab === 'addfilament'){
+    const scanPanelActive = document.querySelector('.subpanel[data-sub="scan"]').classList.contains('active');
+    if(scanPanelActive) setTimeout(()=>document.getElementById('barcodeInput').focus(), 30);
+  }
 }
 function switchSubtab(sub){
   document.querySelectorAll('.subtabs .subtab-btn[data-sub]').forEach(b=>b.classList.toggle('active', b.dataset.sub===sub));
@@ -1749,7 +2017,7 @@ function switchReportsSub(sub){
 /* ---------- Color select (used by New Barcode / Edit modals) ---------- */
 function getColorOptions(){ return data.settings.colors.concat([{name:'Custom...', hex:'__custom__'}]); }
 function buildColorSelect(el){
-  el.innerHTML = getColorOptions().map(c=>`<option value="${c.hex}" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  el.innerHTML = getColorOptions().map(c=>`<option value="${c.hex==='__custom__' ? '__custom__' : safeHex(c.hex)}" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
 }
 function handleColorPresetChange(prefix){
   const sel = document.getElementById(prefix+'_colorPreset');
@@ -1828,8 +2096,8 @@ function updateQuickAddPreview(){
     const label = qColorTouched ? 'Already in stock — tap to select' : 'Already in stock — tap to fill in the color';
     sugBox.innerHTML = '<div class="q-suggestions-label">' + label + '</div>' +
       candidates.map(s=>`
-        <div class="q-suggestion-item" onclick="applyQSuggestion('${s.id}')">
-          <span class="swatch" style="background:${s.colorHex};"></span>
+        <div class="q-suggestion-item" onclick="applyQSuggestion('${jsStr(s.id)}')">
+          <span class="swatch" style="background:${safeHex(s.colorHex)};"></span>
           <span class="q-sug-name">${escapeHtml(skuLabel(s))}</span>
           <span class="q-sug-counts">${s.boxCount} box${s.looseCount ? ' / ' + s.looseCount + ' loose' : ''}</span>
         </div>`).join('');
@@ -1878,7 +2146,7 @@ function applyQSuggestion(id){
   toast('Filled in ' + skuLabel(sku));
 }
 function renderQColorList(){
-  const items = data.settings.colors.map((c,i)=>`<div class="hover-dd-item" onclick="selectQColorByIndex(${i})"><span class="swatch" style="background:${c.hex}"></span>${escapeHtml(c.name)}</div>`).join('');
+  const items = data.settings.colors.map((c,i)=>`<div class="hover-dd-item" onclick="selectQColorByIndex(${i})"><span class="swatch" style="background:${safeHex(c.hex)}"></span>${escapeHtml(c.name)}</div>`).join('');
   document.getElementById('q_color_list').innerHTML = items + `<div class="hover-dd-item custom-item" onclick="selectQColorCustom()">+ Custom color...</div>`;
 }
 function updateQColorDisplay(){
@@ -2285,7 +2553,7 @@ function renderSettingsLists(){
     ? data.settings.materials.map((m,i)=>`<div class="settings-list-item"><span class="name-wrap">${escapeHtml(m)}</span><button class="remove-x" onclick="removeSettingsItem('materials',${i})">&times;</button></div>`).join('')
     : '<div class="empty-state">No materials yet.</div>';
   document.getElementById('colorsSettingsList').innerHTML = data.settings.colors.length
-    ? data.settings.colors.map((c,i)=>`<div class="settings-list-item"><span class="name-wrap"><span class="swatch" style="background:${c.hex}"></span>${escapeHtml(c.name)}</span><button class="remove-x" onclick="removeSettingsItem('colors',${i})">&times;</button></div>`).join('')
+    ? data.settings.colors.map((c,i)=>`<div class="settings-list-item"><span class="name-wrap"><span class="swatch" style="background:${safeHex(c.hex)}"></span>${escapeHtml(c.name)}</span><button class="remove-x" onclick="removeSettingsItem('colors',${i})">&times;</button></div>`).join('')
     : '<div class="empty-state">No colors yet.</div>';
   document.getElementById('categoriesSettingsList').innerHTML = data.settings.issueCategories.length
     ? data.settings.issueCategories.map((c,i)=>`<div class="settings-list-item"><span class="name-wrap">${escapeHtml(c)}</span><button class="remove-x" onclick="removeSettingsItem('issueCategories',${i})">&times;</button></div>`).join('')
@@ -2493,10 +2761,10 @@ function renderInventory(){
     const checked = selectedSkuIds.has(sku.id) ? 'checked' : '';
     rows.push(`
     <tr class="${isLow ? 'low-stock':''}">
-      <td class="row-select-cell"><input type="checkbox" class="row-select-checkbox" data-id="${sku.id}" ${checked} onchange="toggleRowSelect('${sku.id}', this.checked)"></td>
+      <td class="row-select-cell"><input type="checkbox" class="row-select-checkbox" data-id="${escapeHtml(sku.id)}" ${checked} onchange="toggleRowSelect('${jsStr(sku.id)}', this.checked)"></td>
       <td>
         <div class="filament-cell">
-          <span class="swatch" style="background:${sku.colorHex||'#999'}"></span>
+          <span class="swatch" style="background:${safeHex(sku.colorHex||'#999')}"></span>
           <div>
             <span class="prod-name">${escapeHtml(sku.brand)} ${escapeHtml(sku.material)} — ${escapeHtml(sku.colorName)}</span>
             ${isEmpty ? '<span class="empty-badge">OUT OF STOCK</span>' : (isLow ? '<span class="low-badge">LOW</span>' : '')}
@@ -2505,8 +2773,8 @@ function renderInventory(){
           </div>
         </div>
       </td>
-      <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${sku.id}')" title="Check out a box for use">Check Out</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${sku.id}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
-      <td><div class="row-actions">${isSafeHttpUrl(sku.purchaseUrl) ? `<a class="icon-btn" href="${escapeHtml(sku.purchaseUrl)}" target="_blank" rel="noopener noreferrer">Buy</a>` : ''}<button class="icon-btn" onclick="editSku('${sku.id}')">Edit</button><button class="icon-btn" onclick="deleteSku('${sku.id}')">Remove</button></div></td>
+      <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${jsStr(sku.id)}')" title="Check out a box for use">Check Out</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${jsStr(sku.id)}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
+      <td><div class="row-actions">${isSafeHttpUrl(sku.purchaseUrl) ? `<a class="icon-btn" href="${escapeHtml(sku.purchaseUrl)}" target="_blank" rel="noopener noreferrer">Buy</a>` : ''}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
     </tr>`);
   });
   body.innerHTML = rows.join('');
@@ -2971,7 +3239,7 @@ function renderScanLog(){
       <div class="log-delta">${entry.delta>0?'+':''}${entry.delta}</div>
       ${entry.undone
         ? '<span class="scanlog-undone-tag">Undone</span>'
-        : `<button class="scanlog-undo-btn" onclick="undoScanLogEntry('${entry.id}')">Undo</button>`}
+        : `<button class="scanlog-undo-btn" onclick="undoScanLogEntry('${jsStr(entry.id)}')">Undo</button>`}
     </div>`;
   }).join('');
 }
@@ -2991,7 +3259,7 @@ function renderManagePrintersList(){
   const list = document.getElementById('managePrintersList');
   const printers = Object.values(data.printers).sort((a,b)=>(a.order||0)-(b.order||0));
   list.innerHTML = printers.length
-    ? printers.map(p=>`<div class="settings-list-item"><span class="name-wrap">${escapeHtml(p.name)}</span><span style="display:flex;gap:4px;"><button class="icon-btn" onclick="openRenamePrinterModal('${p.id}')">Rename</button><button class="remove-x" onclick="removePrinter('${p.id}')">&times;</button></span></div>`).join('')
+    ? printers.map(p=>`<div class="settings-list-item"><span class="name-wrap">${escapeHtml(p.name)}</span><span style="display:flex;gap:4px;"><button class="icon-btn" onclick="openRenamePrinterModal('${jsStr(p.id)}')">Rename</button><button class="remove-x" onclick="removePrinter('${jsStr(p.id)}')">&times;</button></span></div>`).join('')
     : '<div class="empty-state" style="padding:10px;">No printers yet.</div>';
 }
 function printerNameExists(name, excludeId){
@@ -3033,6 +3301,7 @@ function saveRenamePrinterModal(){
   if(!name){ toast('Enter a printer name'); return; }
   if(printerNameExists(name, renamingPrinterId)){ toast('A printer named "' + name + '" already exists'); return; }
   p.name = name;
+  p.updatedAt = Date.now();
   saveData();
   closeRenamePrinterModal();
   renderManagePrintersList();
@@ -3067,7 +3336,7 @@ function renderCategoryFilterDropdown(){
   const cats = data.settings.issueCategories;
   listEl.innerHTML = `<div class="hover-dd-item" onclick="selectCategoryFilter('')">All categories</div>` +
     `<div class="hover-dd-item" onclick="selectCategoryFilter('__service__')">Serviced</div>` +
-    cats.map(c=>`<div class="hover-dd-item" onclick="selectCategoryFilter('${escapeHtml(c)}')">${escapeHtml(c)}</div>`).join('');
+    cats.map(c=>`<div class="hover-dd-item" onclick="selectCategoryFilter('${jsStr(c)}')">${escapeHtml(c)}</div>`).join('');
   if(printerLogCategoryFilter && printerLogCategoryFilter !== '__service__' && !cats.includes(printerLogCategoryFilter)){
     printerLogCategoryFilter = '';
   }
@@ -3084,7 +3353,7 @@ function renderPrinterFilterDropdown(){
   const listEl = document.getElementById('printerFilterList');
   const printers = Object.values(data.printers).sort((a,b)=>(a.order||0)-(b.order||0));
   listEl.innerHTML = `<div class="hover-dd-item" onclick="selectPrinterLogFilter('')">All printers</div>` +
-    printers.map(p=>`<div class="hover-dd-item" onclick="selectPrinterLogFilter('${p.id}')">${escapeHtml(p.name)}</div>`).join('');
+    printers.map(p=>`<div class="hover-dd-item" onclick="selectPrinterLogFilter('${jsStr(p.id)}')">${escapeHtml(p.name)}</div>`).join('');
   if(printerLogPrinterFilter && !printers.some(p=>p.id===printerLogPrinterFilter)){
     printerLogPrinterFilter = '';
   }
@@ -3158,6 +3427,7 @@ function onPrinterDrop(e, targetId){
   const [moved] = ordered.splice(fromIdx, 1);
   ordered.splice(toIdx, 0, moved);
   ordered.forEach((p,i)=>{ p.order = i; });
+  dragged.updatedAt = Date.now();
   saveData();
   draggedPrinterId = null;
   renderAll();
@@ -3178,7 +3448,7 @@ function deletePrinterLogEntry(logId){
   const p = data.printers[entry.printerId];
   if(p && entry.type === 'issue' && !entry.resolved){
     const stillOpen = data.printerLog.some(l=>l.printerId===p.id && l.type==='issue' && !l.resolved);
-    if(!stillOpen && p.status === 'down') p.status = 'operational';
+    if(!stillOpen && p.status === 'down'){ p.status = 'operational'; p.updatedAt = Date.now(); }
   }
   saveData();
   renderAll();
@@ -3223,11 +3493,13 @@ function savePrinterLogModal(){
   }
   if(type === 'service'){
     p.lastServicedAt = Date.now();
+    p.updatedAt = Date.now();
     data.printerLog.push({ id: uid('plog'), printerId, type:'service', text:note, timestamp:Date.now(), resolved:null, resolvedAt:null });
     toast('Logged service for ' + p.name);
   } else if(type === 'issue'){
     data.printerLog.push({ id: uid('plog'), printerId, type:'issue', text:note, category, timestamp:Date.now(), resolved:false, resolvedAt:null });
     p.status = 'down';
+    p.updatedAt = Date.now();
     toast('Issue logged for ' + p.name);
   } else {
     data.printerLog.push({ id: uid('plog'), printerId, type:'note', text:note, category, timestamp:Date.now(), resolved:null, resolvedAt:null });
@@ -3245,7 +3517,7 @@ function resolvePrinterIssue(logId){
   const p = data.printers[entry.printerId];
   if(p){
     const stillOpen = data.printerLog.some(l=>l.printerId===p.id && l.type==='issue' && !l.resolved);
-    if(!stillOpen && p.status === 'down') p.status = 'operational';
+    if(!stillOpen && p.status === 'down'){ p.status = 'operational'; p.updatedAt = Date.now(); }
   }
   saveData();
   renderAll();
@@ -3255,6 +3527,7 @@ function setPrinterStatus(id, status){
   const p = data.printers[id];
   if(!p) return;
   p.status = status;
+  p.updatedAt = Date.now();
   saveData();
   renderAll();
 }
@@ -3268,6 +3541,7 @@ function setPrinterGroup(id, group){
   const p = data.printers[id];
   if(!p) return;
   p.group = group.trim();
+  p.updatedAt = Date.now();
   saveData();
   renderAll();
 }
@@ -3304,7 +3578,7 @@ function renamePrinterGroup(oldName, newNameRaw){
   if(groupNameExists(newName, oldName)){ toast('A group named "' + newName + '" already exists'); renderGroupManageList(); return; }
   const idx = data.settings.printerGroups.findIndex(g=>g===oldName);
   if(idx !== -1) data.settings.printerGroups[idx] = newName;
-  Object.values(data.printers).forEach(p=>{ if(p.group === oldName) p.group = newName; });
+  Object.values(data.printers).forEach(p=>{ if(p.group === oldName){ p.group = newName; p.updatedAt = Date.now(); } });
   saveData();
   renderGroupManageList();
   renderMaintenance();
@@ -3313,7 +3587,7 @@ function renamePrinterGroup(oldName, newNameRaw){
 function deletePrinterGroup(name){
   if(!confirm('Delete group "' + name + '"? Printers in it will become ungrouped (they are not deleted).')) return;
   data.settings.printerGroups = data.settings.printerGroups.filter(g=>g!==name);
-  Object.values(data.printers).forEach(p=>{ if(p.group === name) p.group = ''; });
+  Object.values(data.printers).forEach(p=>{ if(p.group === name){ p.group = ''; p.updatedAt = Date.now(); } });
   saveData();
   renderGroupManageList();
   renderMaintenance();
@@ -3323,6 +3597,7 @@ function togglePrinterInGroup(printerId, groupName, checked){
   const p = data.printers[printerId];
   if(!p) return;
   p.group = checked ? groupName : '';
+  p.updatedAt = Date.now();
   saveData();
   renderGroupManageList();
   renderMaintenance();
@@ -3340,7 +3615,7 @@ function renderGroupManageList(){
     const checklistHtml = printers.length
       ? `<div class="group-checklist">${printers.map(p=>`
           <label class="toggle-chip">
-            <input type="checkbox" ${p.group===name?'checked':''} onchange="togglePrinterInGroup('${p.id}','${escapeHtml(name)}', this.checked)">
+            <input type="checkbox" ${p.group===name?'checked':''} onchange="togglePrinterInGroup('${jsStr(p.id)}','${jsStr(name)}', this.checked)">
             ${escapeHtml(p.name)}
           </label>`).join('')}</div>`
       : '<div class="empty-state" style="padding:8px;">No printers to assign yet.</div>';
@@ -3348,8 +3623,8 @@ function renderGroupManageList(){
     <div class="group-manage-card">
       <div class="group-manage-head">
         <span class="group-color-dot" style="background:${groupColor(name)};"></span>
-        <input type="text" class="group-name-input" value="${escapeHtml(name)}" onchange="renamePrinterGroup('${escapeHtml(name)}', this.value)">
-        <button class="remove-x" onclick="deletePrinterGroup('${escapeHtml(name)}')" title="Delete group">&times;</button>
+        <input type="text" class="group-name-input" value="${escapeHtml(name)}" onchange="renamePrinterGroup('${jsStr(name)}', this.value)">
+        <button class="remove-x" onclick="deletePrinterGroup('${jsStr(name)}')" title="Delete group">&times;</button>
       </div>
       ${checklistHtml}
     </div>`;
@@ -3380,10 +3655,10 @@ function renderMaintenance(){
     const borderStyle = color ? `border-left:4px solid ${color};` : '';
     return `
     <div class="printer-tile${p.group?' grouped':''}" style="${borderStyle}" draggable="true"
-      ondragstart="onPrinterDragStart(event,'${p.id}')"
-      ondragover="onPrinterDragOver(event,'${p.id}')"
+      ondragstart="onPrinterDragStart(event,'${jsStr(p.id)}')"
+      ondragover="onPrinterDragOver(event,'${jsStr(p.id)}')"
       ondragleave="onPrinterDragLeave(event)"
-      ondrop="onPrinterDrop(event,'${p.id}')"
+      ondrop="onPrinterDrop(event,'${jsStr(p.id)}')"
       ondragend="onPrinterDragEnd()">
       <div class="printer-tile-head">
         <span class="printer-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
@@ -3391,19 +3666,19 @@ function renderMaintenance(){
       </div>
       <span class="status-badge ${p.status}">${statusLabel(p.status)}</span>
       <div class="printer-meta">Last serviced: ${daysAgoLabel(p.lastServicedAt)}</div>
-      <select class="printer-status-select" onchange="setPrinterStatus('${p.id}', this.value)">
+      <select class="printer-status-select" onchange="setPrinterStatus('${jsStr(p.id)}', this.value)">
         <option value="operational" ${p.status==='operational'?'selected':''}>Operational</option>
         <option value="down" ${p.status==='down'?'selected':''}>Down</option>
         <option value="needs_parts" ${p.status==='needs_parts'?'selected':''}>Needs Parts</option>
       </select>
-      <select class="printer-group-input" onchange="setPrinterGroup('${p.id}', this.value)">
+      <select class="printer-group-input" onchange="setPrinterGroup('${jsStr(p.id)}', this.value)">
         <option value="" ${!p.group?'selected':''}>Ungrouped</option>
         ${groupNames.map(g=>`<option value="${escapeHtml(g)}" ${p.group===g?'selected':''}>${escapeHtml(g)}</option>`).join('')}
       </select>
       <div class="printer-tile-actions">
-        <button class="btn" onclick="openPrinterLogModal('${p.id}','service')">Service</button>
-        <button class="btn danger" onclick="openPrinterLogModal('${p.id}','issue')">Issue</button>
-        <button class="btn" onclick="openPrinterLogModal('${p.id}','note')">Note</button>
+        <button class="btn" onclick="openPrinterLogModal('${jsStr(p.id)}','service')">Service</button>
+        <button class="btn danger" onclick="openPrinterLogModal('${jsStr(p.id)}','issue')">Issue</button>
+        <button class="btn" onclick="openPrinterLogModal('${jsStr(p.id)}','note')">Note</button>
       </div>
     </div>`;
   }
@@ -3466,7 +3741,7 @@ function renderMasterPrinterLog(){
       : '';
     const categoryTag = e.category ? `<span class="category-tag">${escapeHtml(e.category)}</span>` : '';
     const resolveBtn = (e.type === 'issue' && !e.resolved)
-      ? `<button class="icon-btn" style="margin-left:8px;" onclick="resolvePrinterIssue('${e.id}')">Mark resolved</button>`
+      ? `<button class="icon-btn" style="margin-left:8px;" onclick="resolvePrinterIssue('${jsStr(e.id)}')">Mark resolved</button>`
       : '';
     return `
     <div class="log-row">
@@ -3474,7 +3749,7 @@ function renderMasterPrinterLog(){
       <div class="log-action">${p ? escapeHtml(p.name) : '(removed)'}</div>
       <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: ${escapeHtml(e.text || '—')}</div>
       ${resolveBtn}
-      <button class="icon-btn" style="margin-left:8px;" onclick="deletePrinterLogEntry('${e.id}')">Delete</button>
+      <button class="icon-btn" style="margin-left:8px;" onclick="deletePrinterLogEntry('${jsStr(e.id)}')">Delete</button>
     </div>`;
   }).join('');
 

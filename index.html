@@ -506,7 +506,7 @@
   .gh-gate-error{color:var(--danger);font-size:12.5px;margin-bottom:12px;}
 
   #syncBanner{
-    position:fixed;top:0;left:0;right:0;background:var(--brand);color:#fff;
+    position:fixed;top:0;left:0;right:0;background:var(--danger);color:#fff;
     padding:9px 16px;font-size:12.5px;font-weight:600;
     display:none;align-items:center;justify-content:center;gap:12px;z-index:120;
   }
@@ -516,6 +516,28 @@
     border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;
   }
   #syncBanner button:hover{background:rgba(255,255,255,0.28);}
+
+  #syncIndicator{
+    position:fixed;bottom:16px;right:16px;z-index:90;
+    display:none;align-items:center;gap:7px;
+    background:var(--surface);border:1px solid var(--border);border-radius:20px;
+    padding:7px 13px 7px 10px;box-shadow:var(--shadow);
+    font-size:11.5px;font-weight:600;color:var(--text-muted);
+    cursor:pointer;user-select:none;transition:box-shadow 0.15s ease;
+  }
+  #syncIndicator:hover{box-shadow:0 2px 10px rgba(15,26,20,0.18);color:var(--text);}
+  #syncIndicator.show{display:flex;}
+  .sync-dot{width:8px;height:8px;border-radius:50%;background:var(--text-muted);flex-shrink:0;}
+  .sync-dot.synced{background:var(--accent-in);}
+  .sync-dot.error{background:var(--danger);}
+  .sync-dot.checking, .sync-dot.syncing{
+    background:var(--accent-out);
+    animation:sync-pulse 0.9s ease-in-out infinite;
+  }
+  @keyframes sync-pulse{
+    0%, 100%{ opacity:1; transform:scale(1); }
+    50%{ opacity:0.45; transform:scale(0.75); }
+  }
   #undoBar .undo-btn:hover{background:rgba(255,255,255,0.28);}
 
   @media (max-width:820px){
@@ -555,7 +577,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">PROTOTYPE // LOCAL STORAGE // v0.3</div>
+    <div class="sub">V0.5</div>
   </div>
 </header>
 
@@ -611,11 +633,6 @@
       </table>
       <div class="empty-state" id="emptyState" style="display:none;">Nothing tracked yet. Use the Stock In/Out tab to get started.</div>
     </section>
-
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
-      <span class="footer-note" style="margin-top:0;">Prefill example inventory to try the app out</span>
-      <button class="btn" id="sampleDataBtn" onclick="toggleSampleData()">Load sample data</button>
-    </div>
 
   </div>
 
@@ -1093,15 +1110,19 @@
   <button onclick="refreshFromGithub()">Refresh</button>
 </div>
 
+<div id="syncIndicator" onclick="manualGhSync()" title="Click to check GitHub for updates">
+  <span class="sync-dot" id="syncIndicatorDot"></span>
+  <span id="syncIndicatorText">Not connected</span>
+</div>
+
 <div class="overlay" id="syncConflictOverlay">
   <div class="modal">
     <h3>Sync conflict</h3>
-    <div class="modal-sub">Someone else saved changes to the shared data before this save went through. Nothing has been overwritten yet.</div>
+    <div class="modal-sub">Someone else saved changes to the shared data before your last change went through. To make sure nothing gets lost, your last action wasn't saved.</div>
     <div class="modal-actions">
-      <button class="btn" onclick="resolveSyncConflict('theirs')">Use their version</button>
-      <button class="btn primary" onclick="resolveSyncConflict('mine')">Keep my changes</button>
+      <button class="btn primary" onclick="resolveSyncConflict()">Refresh now</button>
     </div>
-    <p class="footer-note" style="margin-top:10px;margin-bottom:0;">"Use their version" reloads the latest shared data and discards your unsaved changes on this screen. "Keep my changes" saves what's on your screen over theirs.</p>
+    <p class="footer-note" style="margin-top:10px;margin-bottom:0;">This loads the latest shared data. You'll need to redo your last action (the scan, edit, or note) after refreshing.</p>
   </div>
 </div>
 
@@ -1185,33 +1206,6 @@ function daysSinceServicedForReport(ts){
   return days + (days === 1 ? ' day' : ' days');
 }
 
-const SAMPLE_ITEMS = [
-  {brand:'Bambu Lab', material:'PLA Basic', color:'Black', hex:'#1a1a1a', box:8, loose:2},
-  {brand:'Bambu Lab', material:'PLA Basic', color:'White', hex:'#f5f5f0', box:6, loose:1},
-  {brand:'Bambu Lab', material:'PLA Matte', color:'Red', hex:'#c0392b', box:4, loose:2},
-  {brand:'Bambu Lab', material:'PLA Matte', color:'Blue', hex:'#2980b9', box:3, loose:0},
-  {brand:'Overture', material:'PLA Plus', color:'Gray', hex:'#808080', box:5, loose:1},
-  {brand:'Overture', material:'PLA Plus', color:'Yellow', hex:'#f1c40f', box:2, loose:1},
-  {brand:'Polymaker', material:'PLA Silk', color:'Gold', hex:'#d4af37', box:1, loose:1},
-  {brand:'eSun', material:'PLA', color:'Green', hex:'#27ae60', box:3, loose:0},
-  {brand:'eSun', material:'PLA', color:'Purple', hex:'#8e44ad', box:0, loose:1},
-  {brand:'Bambu Lab', material:'PETG Basic', color:'Black', hex:'#1a1a1a', box:4, loose:1},
-  {brand:'Bambu Lab', material:'PETG Basic', color:'Orange', hex:'#e67e22', box:2, loose:2},
-  {brand:'Polymaker', material:'PETG HF', color:'White', hex:'#f5f5f0', box:3, loose:0},
-  {brand:'Polymaker', material:'PETG HF', color:'Blue', hex:'#2980b9', box:1, loose:1},
-  {brand:'Prusament', material:'PETG-CF', color:'Black', hex:'#1a1a1a', box:1, loose:0},
-  {brand:'Hatchbox', material:'ABS', color:'Natural', hex:'#e8dcc4', box:2, loose:0},
-  {brand:'Hatchbox', material:'ABS', color:'Black', hex:'#1a1a1a', box:0, loose:1},
-  {brand:'Bambu Lab', material:'ASA', color:'White', hex:'#f5f5f0', box:2, loose:0},
-  {brand:'Bambu Lab', material:'ASA', color:'Gray', hex:'#808080', box:1, loose:0},
-  {brand:'SUNLU', material:'TPU 95A', color:'Black', hex:'#1a1a1a', box:1, loose:0},
-  {brand:'SUNLU', material:'TPU 95A', color:'Blue', hex:'#2980b9', box:0, loose:1},
-  {brand:'Bambu Lab', material:'PC', color:'Clear / Translucent', hex:'#dcdcdc', box:1, loose:0},
-  {brand:'Polymaker', material:'PCTG', color:'White', hex:'#f5f5f0', box:2, loose:0},
-  {brand:'Polymaker', material:'PA-CF', color:'Black', hex:'#1a1a1a', box:1, loose:0},
-  {brand:'Elegoo', material:'Support (PVA)', color:'Beige / Natural', hex:'#e8dcc4', box:2, loose:1}
-];
-
 let data = null;
 
 function ensureSettingsDefaults(d){
@@ -1224,7 +1218,6 @@ function ensureSettingsDefaults(d){
   d.settings.brands.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   d.settings.materials.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   d.settings.colors.sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
-  if(d.sampleLoaded === undefined) d.sampleLoaded = false;
   if(!d.events) d.events = [];
   if(!d.skus) d.skus = {};
   if(!d.scanLog) d.scanLog = [];
@@ -1270,7 +1263,7 @@ function saveLocalCache(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){ console.error('Failed to save local cache', e); }
 }
 function freshDataSkeleton(){
-  const fresh = { skus:{}, events:[], settings:{}, sampleLoaded:false };
+  const fresh = { skus:{}, events:[], settings:{} };
   ensureSettingsDefaults(fresh);
   return fresh;
 }
@@ -1286,6 +1279,7 @@ let ghSaveInFlight = false;
 let ghSaveQueued = false;
 let ghLastSyncedAt = null;
 let ghPollTimer = null;
+let ghCheckingInFlight = false;
 
 function hasGhConfig(){
   return !!(ghConfig.owner && ghConfig.repo && ghConfig.path && ghConfig.token);
@@ -1351,15 +1345,42 @@ async function ghSaveFile(){
   const respBody = await res.json();
   ghSha = respBody.content.sha;
 }
+function setSyncIndicatorState(state, label){
+  const wrap = document.getElementById('syncIndicator');
+  const dot = document.getElementById('syncIndicatorDot');
+  const text = document.getElementById('syncIndicatorText');
+  if(!wrap || !dot || !text) return;
+  wrap.classList.toggle('show', hasGhConfig());
+  dot.className = 'sync-dot ' + state;
+  const labels = { idle:'Not connected', checking:'Checking…', syncing:'Syncing…', synced:'Synced', error:'Sync error' };
+  text.textContent = label || labels[state] || state;
+}
 function updateSyncStatusUI(){
   const el = document.getElementById('ghSyncStatusText');
-  if(!el) return;
-  if(!hasGhConfig()){ el.textContent = 'Not connected.'; return; }
+  if(!hasGhConfig()){
+    if(el) el.textContent = 'Not connected.';
+    setSyncIndicatorState('idle');
+    return;
+  }
   const where = ghConfig.owner + '/' + ghConfig.repo + ' — ' + ghConfig.path;
-  if(ghSaveInFlight){ el.textContent = 'Syncing… (' + where + ')'; return; }
-  if(ghDirty){ el.textContent = 'Unsaved changes, syncing shortly… (' + where + ')'; return; }
+  if(ghSaveInFlight){
+    if(el) el.textContent = 'Syncing… (' + where + ')';
+    setSyncIndicatorState('syncing');
+    return;
+  }
+  if(ghCheckingInFlight){
+    if(el) el.textContent = 'Checking for updates… (' + where + ')';
+    setSyncIndicatorState('checking');
+    return;
+  }
+  if(ghDirty){
+    if(el) el.textContent = 'Unsaved changes, syncing shortly… (' + where + ')';
+    setSyncIndicatorState('syncing');
+    return;
+  }
   const when = ghLastSyncedAt ? new Date(ghLastSyncedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) : 'never this session';
-  el.textContent = 'Connected to ' + where + '. Last synced: ' + when + '.';
+  if(el) el.textContent = 'Connected to ' + where + '. Last synced: ' + when + '.';
+  setSyncIndicatorState('synced', 'Synced ' + (ghLastSyncedAt ? new Date(ghLastSyncedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) : ''));
 }
 function saveData(){
   ghDirty = true;
@@ -1393,6 +1414,55 @@ async function flushGithubSave(){
     if(ghSaveQueued){ ghSaveQueued = false; flushGithubSave(); }
   }
 }
+async function ghConditionalCheck(){
+  // Cheap "did anything change" check. A 304 (nothing changed) doesn't count
+  // against GitHub's rate limit, so this is safe to call often.
+  if(!hasGhConfig() || !ghSha) return null;
+  let res;
+  try{
+    res = await fetch(ghApiUrl(), {
+      headers: {
+        'Authorization': 'Bearer ' + ghConfig.token,
+        'Accept': 'application/vnd.github+json',
+        'If-None-Match': '"' + ghSha + '"'
+      }
+    });
+  }catch(e){ return null; }
+  if(res.status === 304) return { changed:false };
+  if(res.status === 200){
+    const body = await res.json();
+    if(body.sha === ghSha) return { changed:false };
+    return { changed:true, json: JSON.parse(base64ToUtf8(body.content)), sha: body.sha };
+  }
+  return null;
+}
+function applyFreshRemoteData(remote, message){
+  data = remote.json;
+  ghSha = remote.sha;
+  ghDirty = false;
+  ensureSettingsDefaults(data);
+  saveLocalCache();
+  renderAll();
+  refreshAllDropdownSources();
+  updateSyncStatusUI();
+  if(message) toast(message);
+}
+async function preEditRefresh(){
+  // Called right before opening anything that edits shared data. If the
+  // remote changed, silently pull it in first — nothing has been typed yet,
+  // so this is always safe and avoids editing data that's already stale.
+  if(!hasGhConfig() || ghDirty) return;
+  ghCheckingInFlight = true;
+  updateSyncStatusUI();
+  const result = await ghConditionalCheck();
+  ghCheckingInFlight = false;
+  if(result && result.changed){
+    applyFreshRemoteData(result, 'Loaded the latest shared data before editing');
+  } else {
+    updateSyncStatusUI();
+  }
+}
+let pendingFreshRemote = null;
 async function handleSyncConflict(){
   let remote;
   try{ remote = await ghFetchFile(); }
@@ -1402,39 +1472,27 @@ async function handleSyncConflict(){
     ghSaveTimer = setTimeout(flushGithubSave, 15000);
     return;
   }
-  pendingRemoteConflict = remote;
+  pendingFreshRemote = remote;
+  document.getElementById('syncBanner').classList.remove('show');
   document.getElementById('syncConflictOverlay').classList.add('open');
 }
-let pendingRemoteConflict = null;
-async function resolveSyncConflict(choice){
+async function resolveSyncConflict(){
   document.getElementById('syncConflictOverlay').classList.remove('open');
-  if(!pendingRemoteConflict) return;
-  if(choice === 'theirs'){
-    data = pendingRemoteConflict.json;
-    ghSha = pendingRemoteConflict.sha;
-    ghDirty = false;
-    ensureSettingsDefaults(data);
-    saveLocalCache();
-    renderAll();
-    refreshAllDropdownSources();
-    toast('Loaded the latest shared version');
-  } else {
-    ghSha = pendingRemoteConflict.sha;
-    pendingRemoteConflict = null;
-    await flushGithubSave();
-    toast('Saved your version over theirs');
-    return;
-  }
-  pendingRemoteConflict = null;
+  if(!pendingFreshRemote) return;
+  applyFreshRemoteData(pendingFreshRemote, 'Refreshed — redo your last action');
+  pendingFreshRemote = null;
 }
 async function pollGhStaleness(){
   if(!hasGhConfig() || ghSaveInFlight || ghDirty) return;
-  try{
-    const remote = await ghFetchFile();
-    if(remote.sha !== ghSha){
-      document.getElementById('syncBanner').classList.add('show');
-    }
-  }catch(e){ /* ignore poll failures, next poll will retry */ }
+  ghCheckingInFlight = true;
+  updateSyncStatusUI();
+  const result = await ghConditionalCheck();
+  ghCheckingInFlight = false;
+  if(result && result.changed){
+    pendingFreshRemote = result;
+    document.getElementById('syncBanner').classList.add('show');
+  }
+  updateSyncStatusUI();
 }
 function startGhPolling(){
   stopGhPolling();
@@ -1452,24 +1510,38 @@ async function refreshFromGithub(){
   if(ghDirty){
     if(!confirm('You have unsaved changes. Refreshing will replace them with the latest shared version. Continue?')) return;
   }
+  if(pendingFreshRemote){
+    applyFreshRemoteData(pendingFreshRemote, 'Refreshed from GitHub');
+    pendingFreshRemote = null;
+    return;
+  }
   try{
     const remote = await ghFetchFile();
-    data = remote.json;
-    ghSha = remote.sha;
-    ghDirty = false;
-    ensureSettingsDefaults(data);
-    saveLocalCache();
-    renderAll();
-    refreshAllDropdownSources();
-    updateSyncStatusUI();
-    toast('Refreshed from GitHub');
+    applyFreshRemoteData(remote, 'Refreshed from GitHub');
   }catch(e){ toast('Could not refresh — try again'); }
 }
-function manualGhSync(){
-  if(!hasGhConfig()){ toast('Connect to GitHub first'); return; }
+async function manualGhSync(){
+  if(!hasGhConfig()){ toast('Connect to GitHub in Settings first'); return; }
+  if(ghSaveInFlight || ghCheckingInFlight) return;
   clearTimeout(ghSaveTimer);
-  if(ghDirty){ flushGithubSave(); }
-  else { pollGhStaleness(); toast('Checked for updates'); }
+  if(ghDirty){
+    await flushGithubSave();
+    return;
+  }
+  ghCheckingInFlight = true;
+  updateSyncStatusUI();
+  const result = await ghConditionalCheck();
+  ghCheckingInFlight = false;
+  if(result && result.changed){
+    document.getElementById('syncBanner').classList.remove('show');
+    applyFreshRemoteData(result, 'Updated with the latest shared data');
+  } else if(result && !result.changed){
+    toast('Already up to date');
+    updateSyncStatusUI();
+  } else {
+    toast('Could not check for updates — try again');
+    updateSyncStatusUI();
+  }
 }
 function renderGhGateSetup(isChange){
   const body = document.getElementById('ghGateBody');
@@ -2012,9 +2084,11 @@ function saveSkuModal(){
 }
 
 /* ---------- Edit modal ---------- */
-function editSku(id){
-  editingSkuId = id;
+async function editSku(id){
+  await preEditRefresh();
   const sku = data.skus[id];
+  if(!sku){ toast('That filament is no longer in the shared data'); return; }
+  editingSkuId = id;
   document.getElementById('editOverlay').classList.add('open');
   document.getElementById('e_brand').value = sku.brand;
   document.getElementById('e_material').value = sku.material;
@@ -2030,8 +2104,8 @@ function editSku(id){
   document.getElementById('e_newBarcode').value = '';
   renderEditBarcodeList();
 }
-function editSkuLoose(id){
-  editSku(id);
+async function editSkuLoose(id){
+  await editSku(id);
   setTimeout(()=>{
     const el = document.getElementById('e_looseCount');
     el.focus();
@@ -2189,7 +2263,8 @@ function bulkRemoveSelected(){
 }
 
 /* ---------- Settings modal ---------- */
-function openSettingsModal(){
+async function openSettingsModal(){
+  await preEditRefresh();
   document.getElementById('settingsOverlay').classList.add('open');
   switchSettingsSub('brands');
 }
@@ -2342,7 +2417,6 @@ function renderAll(){
   renderMaintenance();
   renderPrinterReportSummary();
   renderReport();
-  updateSampleBtn();
 }
 function familyRank(family){
   const i = FAMILY_ORDER.indexOf(family);
@@ -2903,7 +2977,8 @@ function renderScanLog(){
 }
 
 /* ---------- Printer maintenance ---------- */
-function openManagePrintersModal(){
+async function openManagePrintersModal(){
+  await preEditRefresh();
   document.getElementById('managePrintersOverlay').classList.add('open');
   document.getElementById('mp_newName').value = '';
   renderManagePrintersList();
@@ -3109,9 +3184,10 @@ function deletePrinterLogEntry(logId){
   renderAll();
   toast('Entry deleted');
 }
-function openPrinterLogModal(printerId, type){
+async function openPrinterLogModal(printerId, type){
+  await preEditRefresh();
   const p = data.printers[printerId];
-  if(!p) return;
+  if(!p){ toast('That printer is no longer in the shared data'); return; }
   plogContext = { printerId, type };
   const titles = { service:'Log service', issue:'Report issue', note:'Add note' };
   document.getElementById('plog_title').textContent = titles[type] || 'Log entry';
@@ -3195,7 +3271,8 @@ function setPrinterGroup(id, group){
   saveData();
   renderAll();
 }
-function openGroupPrintersModal(){
+async function openGroupPrintersModal(){
+  await preEditRefresh();
   document.getElementById('groupPrintersOverlay').classList.add('open');
   document.getElementById('gp_newGroupName').value = '';
   renderGroupManageList();
@@ -3471,48 +3548,6 @@ function renderPrinterReportSummary(){
     </div>`).join('');
 }
 
-/* ---------- Sample data ---------- */
-function updateSampleBtn(){
-  const btn = document.getElementById('sampleDataBtn');
-  if(btn) btn.textContent = data.sampleLoaded ? 'Clear sample data' : 'Load sample data';
-}
-function loadSampleData(){
-  const now = Date.now();
-  SAMPLE_ITEMS.forEach(item=>{
-    const id = uid('sample');
-    data.skus[id] = {
-      id, barcodes:[], brand:item.brand, material:item.material, colorName:item.color, colorHex:item.hex,
-      boxCount:item.box, looseCount:item.loose, lowStockThreshold:2,
-      weightPerBoxKg: 1, purchaseUrl: '',
-      createdAt: now, updatedAt: now, sample:true
-    };
-    logEvent(id, 'sku_created', item.box+item.loose, 'sample', true);
-  });
-  const usageTargets = Object.values(data.skus).filter(s=>s.sample).slice(0,6);
-  usageTargets.forEach((sku,idx)=>{
-    const count = 6 - idx;
-    for(let k=0;k<count;k++){
-      data.events.push({
-        id: uid('evt'), skuId: sku.id, action:'scan_out', delta:1, source:'sample', sample:true,
-        timestamp: now - Math.floor(Math.random()*25*24*60*60*1000)
-      });
-    }
-  });
-  data.sampleLoaded = true;
-  saveData(); renderAll();
-  toast('Sample data loaded');
-}
-function removeSampleData(){
-  Object.keys(data.skus).forEach(id=>{ if(data.skus[id].sample) delete data.skus[id]; });
-  data.events = data.events.filter(e=>!e.sample);
-  data.sampleLoaded = false;
-  saveData(); renderAll();
-  toast('Sample data removed');
-}
-function toggleSampleData(){
-  if(data.sampleLoaded) removeSampleData(); else loadSampleData();
-}
-
 /* ---------- Data tools ---------- */
 function csvEscape(val){
   const str = String(val === undefined || val === null ? '' : val);
@@ -3575,7 +3610,7 @@ function importData(event){
     try{
       const parsed = JSON.parse(e.target.result);
       if(!parsed.skus) throw new Error('bad shape');
-      if(confirm('Import will replace all current data on this computer. Continue?')){
+      if(confirm('Import will replace the shared data for everyone (it syncs to GitHub, not just this computer). Continue?')){
         ensureSettingsDefaults(parsed);
         data = parsed;
         saveData(); renderAll(); refreshAllDropdownSources();
@@ -3587,8 +3622,8 @@ function importData(event){
   event.target.value = '';
 }
 function clearAllData(){
-  if(confirm("This clears every filament and every scan on this computer. This can't be undone. Continue?")){
-    data = { skus:{}, events:[], settings:{}, sampleLoaded:false };
+  if(confirm("This clears every filament and every scan in the shared data (it syncs to GitHub for everyone). This can't be undone. Continue?")){
+    data = { skus:{}, events:[], settings:{} };
     ensureSettingsDefaults(data);
     saveData(); renderAll(); refreshAllDropdownSources();
     toast('All data cleared');

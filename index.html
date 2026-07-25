@@ -944,6 +944,7 @@
       <div class="field"><label>Weight per box (kg)</label><input type="number" id="f_weightPerBox" value="1" min="0" step="0.05"></div>
       <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_purchaseUrl" placeholder="https://..."></div>
     </div>
+    <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeSkuModal()">Cancel</button>
       <button class="btn primary" onclick="saveSkuModal()">Save</button>
@@ -2311,6 +2312,7 @@ function openSkuModal(barcode){
   document.getElementById('f_disableLowStock').checked = false;
   document.getElementById('f_weightPerBox').value = 1;
   document.getElementById('f_purchaseUrl').value = '';
+  document.getElementById('f_location').value = '';
   setTimeout(()=>document.getElementById('f_brand').focus(), 50);
 }
 function closeSkuModal(){
@@ -2326,6 +2328,7 @@ function saveSkuModal(){
   const disableLowStock = document.getElementById('f_disableLowStock').checked;
   const weightPerBoxKg = Math.max(0, parseFloat(document.getElementById('f_weightPerBox').value)) || 1;
   const purchaseUrl = normalizeUrl(document.getElementById('f_purchaseUrl').value);
+  const location = document.getElementById('f_location').value.trim();
   const barcode = document.getElementById('f_barcode').value.trim();
 
   if(!brand || !material || !color.name){ toast('Brand, material, and color are required'); return; }
@@ -2340,7 +2343,7 @@ function saveSkuModal(){
     looseCount: currentMode==='out' ? qty : 0,
     lowStockThreshold: threshold,
     lowStockDisabled: disableLowStock,
-    weightPerBoxKg, purchaseUrl,
+    weightPerBoxKg, purchaseUrl, location,
     createdAt: Date.now(), updatedAt: Date.now()
   };
   data.skus[id] = sku;

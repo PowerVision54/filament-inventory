@@ -23,6 +23,9 @@
     --accent-out-dark:#824A19;
     --danger:#B3261E;
     --danger-bg:#FBEAE9;
+    --order:#8A6D1F;
+    --order-border:#D9A62A;
+    --order-bg:#FDF3D8;
     --chip-bg:#E7EFEA;
     --input-bg:#F8FAF8;
     --track-bg:#E4EAE5;
@@ -196,6 +199,23 @@
     color:var(--danger);border:1px solid var(--danger);border-radius:4px;
     padding:1px 4px;margin-left:6px;vertical-align:middle;
   }
+  .order-badge{
+    display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.04em;
+    color:var(--order);border:1px solid var(--order-border);border-radius:4px;
+    padding:1px 4px;margin-left:6px;vertical-align:middle;background:var(--order-bg);
+  }
+  tbody tr.on-order-row{background:var(--order-bg);}
+  .log-row.on-order-row{background:var(--order-bg);margin:0 -16px;padding:7px 16px;border-radius:0;}
+  .order-btn{
+    padding:4px 10px;border-radius:5px;border:1px solid var(--order-border);
+    background:var(--order-bg);color:var(--order);font-size:11px;font-weight:700;
+    white-space:nowrap;flex-shrink:0;
+  }
+  .order-btn:hover{background:var(--order-border);color:#fff;}
+  .order-btn.undo-order{
+    background:var(--order);border-color:var(--order);color:#fff;
+  }
+  .order-btn.undo-order:hover{opacity:0.85;}
   .row-actions{display:flex;gap:5px;justify-content:flex-end;}
   .icon-btn{
     border:1px solid var(--border);background:var(--input-bg);border-radius:5px;
@@ -598,7 +618,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.10</div>
+    <div class="sub">V0.11</div>
   </div>
 </header>
 
@@ -797,6 +817,13 @@
         <div class="empty-state" id="runwayEmpty" style="display:none;">Not enough recent usage to estimate runway yet.</div>
       </section>
       <section>
+        <h2>Reorder &amp; shipping times</h2>
+        <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Based on marking things "ordered" in the Reorder tab. "Days to reorder" is how long a filament sat below its low-stock threshold before it got marked ordered. "Shipping" is from the moment it's marked ordered to the moment stock is back above threshold — averaged by brand, since that's mostly a function of who's shipping it, not which filament.</p>
+        <div id="orderStatsPending"></div>
+        <div id="orderStatsByBrand" style="margin-top:10px;"></div>
+        <div class="empty-state" id="orderStatsEmpty" style="display:none;">No completed orders tracked yet — mark something ordered in the Reorder tab to start building this up.</div>
+      </section>
+      <section>
         <div class="section-header-row">
           <h2>Printer maintenance</h2>
           <div class="subtabs" style="margin-bottom:0;">
@@ -847,13 +874,14 @@
         <h2>Reorder report</h2>
         <button class="btn" onclick="copyReorderReport()">Copy as text</button>
       </div>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Everything currently flagged low stock, most urgent first, with estimated runway and a link to reorder where saved. "In stock (kg)" counts sealed boxes only — loose spool weight isn't tracked.</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Everything currently flagged low stock, most urgent first, with estimated runway and a link to reorder where saved. "In stock (kg)" counts sealed boxes only — loose spool weight isn't tracked. Mark something ordered to highlight it yellow here and in Inventory — it clears itself automatically once stock is back above threshold.</p>
       <div class="log-row" style="border-bottom:2px solid var(--border);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:700;">
         <div style="flex:2;">Filament</div>
         <div style="width:120px;text-align:right;">On hand</div>
         <div style="width:70px;text-align:right;">Boxed kg</div>
         <div style="width:70px;text-align:right;">Runway</div>
-        <div style="width:90px;text-align:right;">Order</div>
+        <div style="width:70px;text-align:right;">Buy</div>
+        <div style="width:150px;text-align:right;">Status</div>
       </div>
       <div id="reorderList"></div>
       <div class="empty-state" id="reorderEmpty" style="display:none;">Nothing needs reordering right now.</div>
@@ -1387,6 +1415,7 @@ function ensureSettingsDefaults(d){
   if(!d.printers) d.printers = {};
   if(!d.printerLog) d.printerLog = [];
   if(!d.feedback) d.feedback = [];
+  if(!d.orderLog) d.orderLog = [];
   Object.values(d.skus).forEach(sku=>{
     if(!sku.barcodes){
       sku.barcodes = sku.barcode ? [sku.barcode] : [];
@@ -1582,6 +1611,7 @@ function updateSyncStatusUI(){
   setSyncIndicatorState('synced', 'Synced ' + (ghLastSyncedAt ? new Date(ghLastSyncedAt).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) : ''));
 }
 function saveData(){
+  reconcileOrderTracking(data);
   ghDirty = true;
   if(!ghDirtySince) ghDirtySince = Date.now();
   saveLocalCache();
@@ -1703,6 +1733,7 @@ function mergeData(base, local, remote){
   merged.scanLog = mergeLogArrays(b.scanLog, local.scanLog, merged.scanLog, 'undone').slice(-20);
   merged.printerLog = mergeLogArrays(b.printerLog, local.printerLog, merged.printerLog, 'resolved');
   merged.feedback = mergeLogArrays(b.feedback, local.feedback, merged.feedback);
+  merged.orderLog = mergeLogArrays(b.orderLog, local.orderLog, merged.orderLog, 'settled');
 
   // Sku deletions: whichever side deleted a record wins — a plain edit
   // (checkout, scan, count/field adjustment) never changes createdAt, so a
@@ -1742,7 +1773,7 @@ function mergeData(base, local, remote){
       rs.looseCount = ls.looseCount;
     }
     if((ls.updatedAt||0) > (rs.updatedAt||0)){
-      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location'].forEach(k=>{
+      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location','ordered','orderedAt','lowSince'].forEach(k=>{
         if(ls[k] !== undefined) rs[k] = ls[k];
       });
       rs.updatedAt = ls.updatedAt;
@@ -1796,6 +1827,7 @@ function mergeData(base, local, remote){
   });
 
   ensureSettingsDefaults(merged); // re-sort lists, backfill anything missing
+  reconcileOrderTracking(merged); // e.g. combined counts from both sides may have just cleared a pending order
   return merged;
 }
 function mergeNoticeSuffix(){
@@ -2942,6 +2974,7 @@ function renderAll(){
   renderStockByFamilyPie();
   renderUsageTrend();
   renderRunway();
+  renderOrderStats();
   renderRecentLog();
   renderScanLog();
   renderReorderReport();
@@ -2991,6 +3024,66 @@ function sortSkusForDisplay(skus){
 function isLowStock(sku){
   return !sku.lowStockDisabled && sku.boxCount <= sku.lowStockThreshold;
 }
+/* ---------- Ordering / restock tracking ----------
+   Called after any change to shared data (saveData / mergeData). Idempotent:
+   - the first time a filament is noticed low, stamps sku.lowSince.
+   - once it's back above threshold, clears lowSince and — if it had been
+     marked "ordered" — closes out the matching orderLog entry as received
+     and clears the ordered flag/badge automatically.
+   This is what lets the Reorder tab's yellow "ordered" highlight go away on
+   its own once stock is actually restocked, and lets Reports compute how
+   long each order sat before being placed and how long shipping took. */
+function reconcileOrderTracking(d){
+  const now = Date.now();
+  Object.values(d.skus).forEach(sku=>{
+    if(isLowStock(sku)){
+      if(!sku.lowSince) sku.lowSince = now;
+    } else {
+      if(sku.lowSince) sku.lowSince = null;
+      if(sku.ordered){
+        const openOrder = [...d.orderLog].reverse().find(o=>o.skuId===sku.id && o.status==='pending');
+        if(openOrder){ openOrder.status = 'received'; openOrder.receivedAt = now; openOrder.settled = true; }
+        sku.ordered = false;
+        sku.orderedAt = null;
+      }
+    }
+  });
+  // A filament removed from tracking while an order was pending on it would
+  // otherwise sit "pending" forever with nothing left to ever clear it.
+  d.orderLog.forEach(o=>{
+    if(o.status === 'pending' && !d.skus[o.skuId]){
+      o.status = 'cancelled';
+      o.settled = true;
+    }
+  });
+}
+function markSkuOrdered(id){
+  const sku = data.skus[id];
+  if(!sku || sku.ordered) return;
+  sku.ordered = true;
+  sku.orderedAt = Date.now();
+  sku.updatedAt = Date.now();
+  data.orderLog.push({
+    id: uid('order'), skuId: id, brand: sku.brand, material: sku.material, colorName: sku.colorName,
+    wentLowAt: sku.lowSince || Date.now(), orderedAt: sku.orderedAt, receivedAt: null,
+    status: 'pending', settled: false
+  });
+  saveData();
+  renderAll();
+  toast('Marked ordered: ' + skuLabel(sku));
+}
+function unmarkSkuOrdered(id){
+  const sku = data.skus[id];
+  if(!sku || !sku.ordered) return;
+  sku.ordered = false;
+  sku.orderedAt = null;
+  sku.updatedAt = Date.now();
+  const openOrder = [...data.orderLog].reverse().find(o=>o.skuId===id && o.status==='pending');
+  if(openOrder){ openOrder.status = 'cancelled'; openOrder.settled = true; }
+  saveData();
+  renderAll();
+  toast('Unmarked as ordered: ' + skuLabel(sku));
+}
 function renderInventory(){
   const body = document.getElementById('inventoryBody');
   const search = document.getElementById('searchInput').value.toLowerCase();
@@ -3024,14 +3117,14 @@ function renderInventory(){
     const isEmpty = sku.boxCount === 0 && sku.looseCount === 0;
     const checked = selectedSkuIds.has(sku.id) ? 'checked' : '';
     rows.push(`
-    <tr class="${isLow ? 'low-stock':''}">
+    <tr class="${sku.ordered ? 'on-order-row' : (isLow ? 'low-stock' : '')}">
       <td class="row-select-cell"><input type="checkbox" class="row-select-checkbox" data-id="${escapeHtml(sku.id)}" ${checked} onchange="toggleRowSelect('${jsStr(sku.id)}', this.checked)"></td>
       <td>
         <div class="filament-cell">
           <span class="swatch" style="background:${safeHex(sku.colorHex||'#999')}"></span>
           <div>
             <span class="prod-name">${escapeHtml(sku.brand)} ${escapeHtml(sku.material)} — ${escapeHtml(sku.colorName)}</span>
-            ${isEmpty ? '<span class="empty-badge">OUT OF STOCK</span>' : (isLow ? '<span class="low-badge">LOW</span>' : '')}
+            ${sku.ordered ? '<span class="order-badge">ORDERED</span>' : (isEmpty ? '<span class="empty-badge">OUT OF STOCK</span>' : (isLow ? '<span class="low-badge">LOW</span>' : ''))}
             ${sku.lowStockDisabled ? '<span class="low-badge" style="color:var(--text-muted);border-color:var(--border);">NO WARNING</span>' : ''}
             ${(sku.location || (sku.barcodes && sku.barcodes.length)) ? `<span class="prod-meta-line">${sku.location ? escapeHtml(sku.location) : ''}${(sku.location && sku.barcodes && sku.barcodes.length) ? ' - ' : ''}${(sku.barcodes && sku.barcodes.length) ? `<span class="prod-barcode-inline">${escapeHtml(sku.barcodes[0])}${sku.barcodes.length>1 ? ' +'+(sku.barcodes.length-1)+' more' : ''}</span>` : ''}</span>` : ''}
           </div>
@@ -3396,6 +3489,73 @@ function renderRunway(){
     </div>`;
   }).join('');
 }
+function daysBetween(a, b){ return (b - a) / 86400000; }
+function computeOrderStats(){
+  const completed = data.orderLog.filter(o=>o.status==='received' && o.receivedAt);
+  const byBrand = {};
+  completed.forEach(o=>{
+    const key = o.brand || 'Unknown';
+    if(!byBrand[key]) byBrand[key] = { brand:key, count:0, shipDaysTotal:0, reorderDaysTotal:0, reorderSamples:0 };
+    const b = byBrand[key];
+    b.count++;
+    b.shipDaysTotal += daysBetween(o.orderedAt, o.receivedAt);
+    if(o.wentLowAt){ b.reorderDaysTotal += daysBetween(o.wentLowAt, o.orderedAt); b.reorderSamples++; }
+  });
+  const brandRows = Object.values(byBrand).map(b=>({
+    brand: b.brand,
+    count: b.count,
+    avgShipDays: b.shipDaysTotal / b.count,
+    avgReorderDays: b.reorderSamples ? b.reorderDaysTotal / b.reorderSamples : null
+  })).sort((a,b)=>b.count-a.count);
+  const pending = data.orderLog
+    .filter(o=>o.status==='pending')
+    .map(o=>({ ...o, daysWaiting: daysBetween(o.orderedAt, Date.now()) }))
+    .sort((a,b)=>b.daysWaiting-a.daysWaiting);
+  return { brandRows, pending };
+}
+function renderOrderStats(){
+  const pendingEl = document.getElementById('orderStatsPending');
+  const brandEl = document.getElementById('orderStatsByBrand');
+  const emptyEl = document.getElementById('orderStatsEmpty');
+  if(!pendingEl || !brandEl || !emptyEl) return;
+  const { brandRows, pending } = computeOrderStats();
+
+  pendingEl.innerHTML = pending.length ? `
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">Currently on order (${pending.length})</h3>
+    ${pending.map(o=>{
+      const sku = data.skus[o.skuId];
+      const label = sku ? skuLabel(sku) : (o.brand + ' ' + o.material + ' ' + o.colorName + ' (removed)');
+      return `
+      <div class="log-row on-order-row">
+        <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(label)}</div>
+        <div class="log-item" style="text-align:right;">Ordered ${new Date(o.orderedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div>
+        <div style="width:110px;text-align:right;font-weight:700;">${o.daysWaiting.toFixed(1)} days so far</div>
+      </div>`;
+    }).join('')}
+  ` : '';
+
+  emptyEl.style.display = (!pending.length && !brandRows.length) ? 'block' : 'none';
+
+  brandEl.innerHTML = brandRows.length ? `
+    <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">Average by brand, completed orders</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead><tr style="border-bottom:2px solid var(--border);text-align:left;">
+        <th style="padding:6px 4px;">Brand</th>
+        <th style="padding:6px 4px;text-align:right;">Orders</th>
+        <th style="padding:6px 4px;text-align:right;">Avg days to reorder</th>
+        <th style="padding:6px 4px;text-align:right;">Avg shipping days</th>
+      </tr></thead>
+      <tbody>${brandRows.map(b=>`
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 4px;">${escapeHtml(b.brand)}</td>
+          <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${b.count}</td>
+          <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${b.avgReorderDays === null ? '—' : b.avgReorderDays.toFixed(1)}</td>
+          <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;">${b.avgShipDays.toFixed(1)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  ` : '';
+}
 function computeReorderRows(){
   const runway = computeRunwayRows();
   const weeksLeftBySku = {};
@@ -3421,13 +3581,17 @@ function renderReorderReport(){
     const buyLink = isSafeHttpUrl(sku.purchaseUrl)
       ? `<a class="icon-btn" href="${escapeHtml(sku.purchaseUrl)}" target="_blank" rel="noopener noreferrer">Buy &rarr;</a>`
       : '<span class="footer-note" style="margin:0;">No link</span>';
+    const statusHtml = sku.ordered
+      ? `<button class="order-btn undo-order" onclick="unmarkSkuOrdered('${jsStr(sku.id)}')" title="Click if this wasn't actually ordered, or was ordered by mistake">Ordered &mdash; undo</button>`
+      : `<button class="order-btn" onclick="markSkuOrdered('${jsStr(sku.id)}')">Mark ordered</button>`;
     return `
-    <div class="log-row">
+    <div class="log-row${sku.ordered ? ' on-order-row' : ''}">
       <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(skuLabel(sku))}</div>
       <div style="width:120px;text-align:right;">${sku.boxCount} box / ${sku.looseCount} loose</div>
       <div style="width:70px;text-align:right;color:var(--text-muted);">${kgInStock} kg</div>
       <div style="width:70px;text-align:right;font-weight:700;">${weeksText}</div>
-      <div style="width:90px;text-align:right;">${buyLink}</div>
+      <div style="width:70px;text-align:right;">${buyLink}</div>
+      <div style="width:150px;text-align:right;">${statusHtml}</div>
     </div>`;
   }).join('');
 }

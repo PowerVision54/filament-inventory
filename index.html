@@ -618,7 +618,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.11</div>
+    <div class="sub">V0.12</div>
   </div>
 </header>
 
@@ -880,7 +880,7 @@
         <div style="width:120px;text-align:right;">On hand</div>
         <div style="width:70px;text-align:right;">Boxed kg</div>
         <div style="width:70px;text-align:right;">Runway</div>
-        <div style="width:70px;text-align:right;">Buy</div>
+        <div style="width:105px;text-align:right;">Buy</div>
         <div style="width:150px;text-align:right;">Status</div>
       </div>
       <div id="reorderList"></div>
@@ -1329,21 +1329,44 @@ function seedBambuColorsIfNeeded(d){
   });
   d.settings.colors.sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
 }
-function lookupSeedPurchaseUrl(brand, material, colorName){
-  if((brand||'').trim().toLowerCase() !== 'bambu lab') return '';
-  const list = BAMBU_COLOR_SEED[(material||'').trim().toLowerCase()];
-  if(!list) return '';
-  const hit = list.find(c=>c.name.toLowerCase() === (colorName||'').trim().toLowerCase());
-  return hit ? hit.url : '';
+// Amazon is where everything except Bambu Lab actually gets ordered from
+// here, and product links for that go stale often — a search link never
+// breaks, and gets within a click or two of the right listing.
+function amazonSearchUrl(brand, material, colorName){
+  const parts = [brand, material, colorName].map(s=>(s||'').trim()).filter(Boolean);
+  if(!parts.length) return '';
+  return 'https://www.amazon.com/s?k=' + encodeURIComponent(parts.join(' ')).replace(/%20/g, '+');
 }
-// Fills a "where to buy" field with the known link once brand+material+color
-// match Bambu Lab PLA Basic — but only ever touches a field it filled in
-// itself (tracked via data-autofilled), so it can update/clear itself as the
+function lookupDefaultPurchaseUrl(brand, material, colorName){
+  const isBambu = (brand||'').trim().toLowerCase() === 'bambu lab';
+  if(isBambu){
+    const list = BAMBU_COLOR_SEED[(material||'').trim().toLowerCase()];
+    const hit = list && list.find(c=>c.name.toLowerCase() === (colorName||'').trim().toLowerCase());
+    return hit ? hit.url : ''; // bought directly from Bambu — don't guess with an Amazon search
+  }
+  return amazonSearchUrl(brand, material, colorName);
+}
+// The link actually used for a saved filament: whatever's explicitly saved,
+// else the same default (Bambu catalog link or Amazon search) the forms
+// autofill live. Used anywhere a "Buy" link is shown for an existing sku.
+function effectivePurchaseUrl(sku){
+  if(isSafeHttpUrl(sku.purchaseUrl)) return sku.purchaseUrl;
+  return lookupDefaultPurchaseUrl(sku.brand, sku.material, sku.colorName);
+}
+// True only for our own generated Amazon search links — used to label the
+// link "Search Amazon" instead of "Buy" (a real saved link or Bambu's own
+// catalog link both point somewhere specific and get the plain "Buy" label).
+function isAmazonSearchFallback(url){
+  return /^https:\/\/www\.amazon\.com\/s\?k=/.test(url || '');
+}
+// Fills a "where to buy" field with the known default once brand/material/
+// color are entered — but only ever touches a field it filled in itself
+// (tracked via data-autofilled), so it can update/clear itself as the
 // selection changes without ever overwriting something the person typed.
 function applyPurchaseUrlAutofill(prefix, brand, material, colorName){
   const field = document.getElementById(prefix + '_purchaseUrl');
   if(!field) return;
-  const seedUrl = lookupSeedPurchaseUrl(brand, material, colorName);
+  const seedUrl = lookupDefaultPurchaseUrl(brand, material, colorName);
   const isOurs = field.dataset.autofilled === '1';
   if(seedUrl){
     if(!field.value.trim() || isOurs){
@@ -3131,7 +3154,7 @@ function renderInventory(){
         </div>
       </td>
       <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${jsStr(sku.id)}')" title="Check out a box for use">Check Out</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${jsStr(sku.id)}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
-      <td><div class="row-actions">${isSafeHttpUrl(sku.purchaseUrl) ? `<a class="icon-btn" href="${escapeHtml(sku.purchaseUrl)}" target="_blank" rel="noopener noreferrer">Buy</a>` : ''}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
+      <td><div class="row-actions">${(()=>{ const u = effectivePurchaseUrl(sku); return isSafeHttpUrl(u) ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${isAmazonSearchFallback(u) ? 'Amazon' : 'Buy'}</a>` : ''; })()}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
     </tr>`);
   });
   body.innerHTML = rows.join('');
@@ -3564,6 +3587,10 @@ function computeReorderRows(){
     .filter(sku => isLowStock(sku))
     .map(sku => ({ sku, weeksLeft: weeksLeftBySku[sku.id] !== undefined ? weeksLeftBySku[sku.id] : null }))
     .sort((a,b)=>{
+      // Already-ordered items sink to the bottom as a block, so what still
+      // needs attention is always at the top.
+      const ao = a.sku.ordered ? 1 : 0, bo = b.sku.ordered ? 1 : 0;
+      if(ao !== bo) return ao - bo;
       if(a.sku.boxCount !== b.sku.boxCount) return a.sku.boxCount - b.sku.boxCount;
       const aw = a.weeksLeft === null ? Infinity : a.weeksLeft;
       const bw = b.weeksLeft === null ? Infinity : b.weeksLeft;
@@ -3578,8 +3605,9 @@ function renderReorderReport(){
     const sku = r.sku;
     const weeksText = r.weeksLeft === null ? '—' : (r.weeksLeft < 10 ? r.weeksLeft.toFixed(1) : Math.round(r.weeksLeft)) + ' wks';
     const kgInStock = (sku.boxCount * boxKg(sku)).toFixed(1);
-    const buyLink = isSafeHttpUrl(sku.purchaseUrl)
-      ? `<a class="icon-btn" href="${escapeHtml(sku.purchaseUrl)}" target="_blank" rel="noopener noreferrer">Buy &rarr;</a>`
+    const effUrl = effectivePurchaseUrl(sku);
+    const buyLink = isSafeHttpUrl(effUrl)
+      ? `<a class="icon-btn" href="${escapeHtml(effUrl)}" target="_blank" rel="noopener noreferrer">${isAmazonSearchFallback(effUrl) ? 'Amazon' : 'Buy'} &rarr;</a>`
       : '<span class="footer-note" style="margin:0;">No link</span>';
     const statusHtml = sku.ordered
       ? `<button class="order-btn undo-order" onclick="unmarkSkuOrdered('${jsStr(sku.id)}')" title="Click if this wasn't actually ordered, or was ordered by mistake">Ordered &mdash; undo</button>`
@@ -3590,7 +3618,7 @@ function renderReorderReport(){
       <div style="width:120px;text-align:right;">${sku.boxCount} box / ${sku.looseCount} loose</div>
       <div style="width:70px;text-align:right;color:var(--text-muted);">${kgInStock} kg</div>
       <div style="width:70px;text-align:right;font-weight:700;">${weeksText}</div>
-      <div style="width:70px;text-align:right;">${buyLink}</div>
+      <div style="width:105px;text-align:right;">${buyLink}</div>
       <div style="width:150px;text-align:right;">${statusHtml}</div>
     </div>`;
   }).join('');
@@ -3602,8 +3630,9 @@ function copyReorderReport(){
     const sku = r.sku;
     const weeksText = r.weeksLeft === null ? 'runway unknown' : (r.weeksLeft < 10 ? r.weeksLeft.toFixed(1) : Math.round(r.weeksLeft)) + ' wks left';
     const kg = (sku.boxCount * boxKg(sku)).toFixed(1);
-    const link = sku.purchaseUrl || 'no link saved';
-    return `${skuLabel(sku)} — ${sku.boxCount} box / ${sku.looseCount} loose (${kg} kg) — ${weeksText} — ${link}`;
+    const link = effectivePurchaseUrl(sku) || 'no link';
+    const orderedTag = sku.ordered ? ' — already ordered' : '';
+    return `${skuLabel(sku)} — ${sku.boxCount} box / ${sku.looseCount} loose (${kg} kg) — ${weeksText} — ${link}${orderedTag}`;
   });
   const text = 'Reorder report — ' + new Date().toLocaleDateString() + '\n\n' + lines.join('\n');
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -4268,15 +4297,15 @@ function downloadCSV(filename, rows){
   URL.revokeObjectURL(url);
 }
 function exportStockCSV(){
-  const rows = [['Brand','Material','Family','Color','Boxes','Loose','Weight per box (kg)','Low stock threshold','Low stock flag disabled','Currently low stock','Barcodes','Purchase URL']];
+  const rows = [['Brand','Material','Family','Color','Boxes','Loose','Weight per box (kg)','Low stock threshold','Low stock flag disabled','Currently low stock','Ordered','Barcodes','Purchase URL']];
   Object.values(data.skus)
     .sort((a,b)=>skuLabel(a).localeCompare(skuLabel(b)))
     .forEach(sku=>{
       rows.push([
         sku.brand, sku.material, materialFamily(sku.material), sku.colorName,
         sku.boxCount, sku.looseCount, boxKg(sku), sku.lowStockThreshold,
-        sku.lowStockDisabled ? 'Yes' : 'No', isLowStock(sku) ? 'Yes' : 'No',
-        (sku.barcodes || []).join('; '), sku.purchaseUrl || ''
+        sku.lowStockDisabled ? 'Yes' : 'No', isLowStock(sku) ? 'Yes' : 'No', sku.ordered ? 'Yes' : 'No',
+        (sku.barcodes || []).join('; '), effectivePurchaseUrl(sku)
       ]);
     });
   downloadCSV('filament-inventory-stock-' + new Date().toISOString().slice(0,10) + '.csv', rows);

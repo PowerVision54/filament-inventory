@@ -630,7 +630,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.14</div>
+    <div class="sub">V0.16</div>
   </div>
 </header>
 
@@ -995,6 +995,21 @@
         <button class="btn danger" onclick="resetAllLooseCounts()">Reset ALL loose counts to 0</button>
       </div>
       <p class="footer-note" style="margin-bottom:0;">This isn't selective — it zeroes every filament's loose count at once, common or rare. Use it only if loose tracking has gotten messy across the board and you want a clean slate. Like everything else here, it's undoable for 20 seconds right after.</p>
+    </section>
+    <section>
+      <h2>Database Health</h2>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How big the shared data file is and how the last few syncs have performed — calculated entirely from what's already loaded, no extra requests. This is about keeping the app itself fast, not about GitHub's file size limits (which are far higher than this app should ever need).</p>
+      <div class="stat-strip" style="flex-wrap:wrap;margin-bottom:14px;">
+        <div class="stat-item"><div class="num" id="dbHealthNum" style="font-size:16px;">—</div><div class="label">Health</div></div>
+        <div class="stat-item"><div class="num" id="dbSizeNum">—</div><div class="label">Database size</div></div>
+        <div class="stat-item"><div class="num" id="dbTargetNum" style="font-size:16px;">&lt; 2 MB</div><div class="label">Design target</div></div>
+        <div class="stat-item"><div class="num" id="dbSyncNum">—</div><div class="label">Avg sync time</div></div>
+        <div class="stat-item"><div class="num" id="dbLargestNum" style="font-size:13px;">—</div><div class="label">Largest section</div></div>
+      </div>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">Database breakdown</h3>
+      <div id="dbBreakdownList"></div>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Record counts</h3>
+      <div id="dbRecordCountsList"></div>
     </section>
   </div>
 
@@ -1579,7 +1594,7 @@ function fromBase64Url(s){
   return s;
 }
 function buildGhShareLink(){
-  const payload = JSON.stringify({ o: ghConfig.owner, r: ghConfig.repo, p: ghConfig.path, t: ghConfig.token });
+  const payload = JSON.stringify({ o: ghConfig.owner, r: ghConfig.repo, p: ghConfig.path, t: ghConfig.token, iat: Date.now() });
   return location.origin + location.pathname + '#connect=' + toBase64Url(utf8ToBase64(payload));
 }
 function copyGhShareLink(){
@@ -1597,17 +1612,24 @@ function copyGhShareLink(){
     toast('Clipboard not available in this browser');
   }
 }
+const SHARE_LINK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 function consumeShareLinkIfPresent(){
   const m = (location.hash || '').match(/^#connect=(.+)$/);
   if(!m) return null;
   // Scrub it from the address bar / this tab's history immediately,
   // whether or not it turns out to parse — it shouldn't linger either way.
   history.replaceState(null, '', location.pathname + location.search);
-  try{
-    const parsed = JSON.parse(base64ToUtf8(fromBase64Url(m[1])));
-    if(!parsed || !parsed.o || !parsed.r || !parsed.t) return null;
-    return { owner: parsed.o, repo: parsed.r, path: parsed.p || 'inventory-data.json', token: parsed.t };
-  }catch(e){ return null; }
+  let parsed;
+  try{ parsed = JSON.parse(base64ToUtf8(fromBase64Url(m[1]))); }catch(e){ return null; }
+  if(!parsed || !parsed.o || !parsed.r || !parsed.t) return null;
+  // Check the age BEFORE handing anything back — an expired link must never
+  // reach the caller with owner/repo/token attached, so there's nothing to
+  // accidentally pre-fill into a form even by mistake. Missing/malformed
+  // timestamps (e.g. a link built before this check existed) fail closed.
+  if(typeof parsed.iat !== 'number' || (Date.now() - parsed.iat) > SHARE_LINK_MAX_AGE_MS){
+    return { expired: true };
+  }
+  return { owner: parsed.o, repo: parsed.r, path: parsed.p || 'inventory-data.json', token: parsed.t };
 }
 async function ghFetchFile(){
   let res;
@@ -1718,12 +1740,15 @@ async function flushGithubSave(){
   ghSaveInFlight = true;
   updateSyncStatusUI();
   try{
+    const syncStart = performance.now();
     await ghSaveFile();
+    recordSyncDuration(performance.now() - syncStart); // only successful syncs count toward the average
     ghDirty = false;
     ghDirtySince = null;
     ghConflictStreak = 0;
     ghLastSyncedAt = Date.now();
     saveLocalCache();
+    renderDbHealth();
   }catch(err){
     if(err.type === 'conflict'){
       await handleSyncConflict();
@@ -2108,6 +2133,14 @@ function renderGhGateError(message, showChangeLink){
     </div>
   `;
 }
+function renderGhGateExpired(){
+  document.getElementById('ghGateBody').innerHTML = `
+    <div class="gh-gate-error">This link has expired — share links only work for 7 days after they're created. Ask whoever sent it for a fresh one, or connect manually below.</div>
+    <div class="form-actions" style="justify-content:flex-end;">
+      <button class="btn primary" onclick="renderGhGateSetup(false)">Connect manually</button>
+    </div>
+  `;
+}
 function showGhGate(){ document.getElementById('ghGateScreen').style.display = 'flex'; }
 function hideGhGate(){ document.getElementById('ghGateScreen').style.display = 'none'; }
 function closeGhGateIfConfigured(){
@@ -2130,7 +2163,17 @@ function saveGhSetupForm(){
 }
 async function initApp(){
   const sharedConfig = consumeShareLinkIfPresent();
-  if(sharedConfig){
+  if(sharedConfig && sharedConfig.expired && !hasGhConfig()){
+    // Only worth interrupting for if this browser has nothing else to fall
+    // back on — that's the actual "trying to onboard with a stale link"
+    // case. If it's already connected to something, just ignore the old
+    // link entirely and carry on into the app below.
+    showGhGate();
+    renderGhGateExpired();
+    return;
+  }
+  const validShared = (sharedConfig && !sharedConfig.expired) ? sharedConfig : null;
+  if(validShared){
     if(hasGhConfig()){
       // Already connected to something on this browser — don't silently
       // switch away from it. Pre-fill the reconnect form instead, so one
@@ -2140,16 +2183,16 @@ async function initApp(){
       setTimeout(()=>{
         const o=document.getElementById('ghs_owner'), r=document.getElementById('ghs_repo'),
               p=document.getElementById('ghs_path'), t=document.getElementById('ghs_token');
-        if(o) o.value = sharedConfig.owner;
-        if(r) r.value = sharedConfig.repo;
-        if(p) p.value = sharedConfig.path;
-        if(t) t.value = sharedConfig.token;
+        if(o) o.value = validShared.owner;
+        if(r) r.value = validShared.repo;
+        if(p) p.value = validShared.path;
+        if(t) t.value = validShared.token;
       }, 30);
       return;
     }
     // Nothing connected yet on this browser — this is exactly the "open the
     // link and land in the app" case, so connect right away, no extra click.
-    ghConfig = sharedConfig;
+    ghConfig = validShared;
     saveGhConfigToStorage();
     ghSha = null;
   }
@@ -3090,6 +3133,100 @@ function removeSettingsItem(type, index){
   if(type === 'issueCategories') renderMaintenance();
 }
 
+/* ---------- Database Health ----------
+   Purely informational — everything here reads the already-loaded `data`
+   object and this browser's own recent sync timings. No extra GitHub
+   requests, no writes, nothing scheduled. This measures whether the app
+   stays fast, not whether GitHub would accept a larger file (it would). */
+const SYNC_PERF_KEY = 'syncPerfHistory_v1';
+function loadSyncPerfHistory(){
+  try{ const arr = JSON.parse(localStorage.getItem(SYNC_PERF_KEY)); return Array.isArray(arr) ? arr : []; }
+  catch(e){ return []; }
+}
+function recordSyncDuration(ms){
+  const arr = loadSyncPerfHistory();
+  arr.push(ms);
+  if(arr.length > 20) arr.splice(0, arr.length - 20);
+  try{ localStorage.setItem(SYNC_PERF_KEY, JSON.stringify(arr)); }catch(e){}
+}
+function averageSyncDuration(){
+  const arr = loadSyncPerfHistory();
+  return arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : null;
+}
+function measureBytes(obj){ return new Blob([JSON.stringify(obj)]).size; }
+function formatBytes(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  const kb = bytes / 1024;
+  if(kb < 1024) return kb.toFixed(kb < 10 ? 1 : 0) + ' KB';
+  return (kb / 1024).toFixed(2) + ' MB';
+}
+const DB_HEALTH_TIERS = [
+  { emoji:'\u{1F7E2}', label:'Excellent' },
+  { emoji:'\u{1F7E1}', label:'Good' },
+  { emoji:'\u{1F7E0}', label:'Growing' },
+  { emoji:'\u{1F534}', label:'Large' }
+];
+function computeDbHealth(){
+  const MB = 1024*1024;
+  const totalBytes = measureBytes(data);
+  const sections = [
+    { label:'Activity Events', bytes: measureBytes(data.events) },
+    { label:'Inventory', bytes: measureBytes(data.skus) },
+    { label:'Printer Log', bytes: measureBytes(data.printerLog) },
+    { label:'Settings', bytes: measureBytes(data.settings) },
+    { label:'Feedback', bytes: measureBytes(data.feedback) },
+    { label:'Order History', bytes: measureBytes(data.orderLog) },
+    { label:'Scan Log', bytes: measureBytes(data.scanLog) }
+  ].sort((a,b)=>b.bytes-a.bytes);
+  const sectionsTotal = sections.reduce((s,x)=>s+x.bytes, 0);
+  const largest = sections[0];
+  const largestPct = sectionsTotal ? (largest.bytes / sectionsTotal * 100) : 0;
+
+  const avgSyncMs = averageSyncDuration();
+
+  const recordCounts = [
+    { label:'SKUs', count: Object.keys(data.skus).length },
+    { label:'Activity Events', count: data.events.length },
+    { label:'Printer Logs', count: data.printerLog.length },
+    { label:'Scan Logs', count: data.scanLog.length },
+    { label:'Feedback', count: data.feedback.length },
+    { label:'Order History', count: data.orderLog.length }
+  ];
+
+  // Worst signal wins — a healthy size doesn't matter if syncing is slow,
+  // and vice versa. A single bloated section can flag "Good" even at a
+  // small total size, so a real problem is visible before it grows further.
+  const sizeTier = totalBytes < 2*MB ? 0 : totalBytes < 5*MB ? 1 : totalBytes < 10*MB ? 2 : 3;
+  const syncTier = avgSyncMs === null ? 0 : avgSyncMs < 500 ? 0 : avgSyncMs < 1000 ? 1 : avgSyncMs < 2000 ? 2 : 3;
+  const sectionTier = largestPct >= 70 ? 1 : 0;
+  const tier = Math.max(sizeTier, syncTier, sectionTier);
+
+  return { totalBytes, sections, largest, largestPct, avgSyncMs, recordCounts, health: DB_HEALTH_TIERS[tier] };
+}
+function renderDbHealth(){
+  const sizeEl = document.getElementById('dbSizeNum');
+  if(!sizeEl || !data) return;
+  const h = computeDbHealth();
+  document.getElementById('dbHealthNum').textContent = h.health.emoji + ' ' + h.health.label;
+  sizeEl.textContent = formatBytes(h.totalBytes);
+  document.getElementById('dbSyncNum').textContent = h.avgSyncMs === null ? '—' : (h.avgSyncMs/1000).toFixed(2) + ' sec';
+  document.getElementById('dbLargestNum').textContent = h.largest ? h.largest.label + ' (' + h.largestPct.toFixed(0) + '%)' : '—';
+
+  const maxBytes = Math.max(1, ...h.sections.map(s=>s.bytes));
+  document.getElementById('dbBreakdownList').innerHTML = h.sections.map(s=>`
+    <div class="bar-row">
+      <div class="bar-label">${escapeHtml(s.label)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(s.bytes/maxBytes*100).toFixed(0)}%;"></div></div>
+      <div class="bar-count" style="width:70px;">${formatBytes(s.bytes)}</div>
+    </div>`).join('');
+
+  document.getElementById('dbRecordCountsList').innerHTML = h.recordCounts.map(r=>`
+    <div class="log-row">
+      <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(r.label)}</div>
+      <div style="width:100px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;">${r.count.toLocaleString()}</div>
+    </div>`).join('');
+}
+
 /* ---------- Render ---------- */
 function renderAll(){
   renderInventory();
@@ -3100,6 +3237,7 @@ function renderAll(){
   renderUsageTrend();
   renderRunway();
   renderOrderStats();
+  renderDbHealth();
   renderRecentLog();
   renderScanLog();
   renderReorderReport();

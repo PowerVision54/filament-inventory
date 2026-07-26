@@ -2783,7 +2783,7 @@ function checkOutBox(id){
   sku.boxCount -= 1; sku.looseCount += 1; sku.updatedAt = Date.now();
   logEvent(id, 'open_box', 1, 'manual');
   saveData(); renderAll();
-  showUndoBar('Checked out: ' + skuLabel(sku));
+  showUndoBar('Opened box: ' + skuLabel(sku));
 }
 function deleteSku(id){
   const sku = data.skus[id];
@@ -3153,7 +3153,7 @@ function renderInventory(){
           </div>
         </div>
       </td>
-      <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${jsStr(sku.id)}')" title="Check out a box for use">Check Out</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${jsStr(sku.id)}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
+      <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${jsStr(sku.id)}')" title="Open a box for use">Open Box</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${jsStr(sku.id)}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
       <td><div class="row-actions">${(()=>{ const u = effectivePurchaseUrl(sku); return isSafeHttpUrl(u) ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${isAmazonSearchFallback(u) ? 'Amazon' : 'Buy'}</a>` : ''; })()}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
     </tr>`);
   });
@@ -3644,7 +3644,7 @@ function copyReorderReport(){
 const ACTION_LABELS = {
   scan_in:'Scanned in', scan_out:'Scanned out', scan_out_no_box:'Scanned out (no box)',
   sku_created:'Added filament', manual_add:'Added stock', adjust_box:'Adjusted boxes', adjust_loose:'Adjusted loose',
-  open_box:'Checked out', loose_consumed:'Spool used up', undo_scan:'Undone'
+  open_box:'Opened box', loose_consumed:'Spool used up', undo_scan:'Undone'
 };
 let recentLogLimit = 25;
 function renderRecentLog(){

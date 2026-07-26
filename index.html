@@ -152,6 +152,18 @@
   .stat-item.low .num{color:var(--danger);}
   .stat-item .label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-top:3px;}
 
+  .stat-item.quick-check-item{flex:1.7;min-width:170px;}
+  .qc-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:700;margin-bottom:4px;}
+  .qc-name{font-size:12.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .qc-expected{font-size:11px;color:var(--text-muted);margin:2px 0 6px;}
+  .qc-actions{display:flex;gap:6px;}
+  .qc-btn{flex:1;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);font-size:11.5px;font-weight:700;color:var(--text);}
+  .qc-btn.yes{background:var(--accent-in);border-color:var(--accent-in-dark);color:#fff;}
+  .qc-btn.yes:hover{background:var(--accent-in-dark);}
+  .qc-btn.no:hover{border-color:var(--text);}
+  .qc-done, .qc-empty{font-size:12px;color:var(--text-muted);line-height:1.4;}
+  .qc-done strong{color:var(--text);}
+
   .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
   .filter-row input, .filter-row select{
     padding:7px 9px;border-radius:6px;border:1px solid var(--border);
@@ -618,7 +630,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.12</div>
+    <div class="sub">V0.13</div>
   </div>
 </header>
 
@@ -643,6 +655,7 @@
         <div class="stat-item"><div class="num" id="statSkus">0</div><div class="label">Filaments tracked</div></div>
         <div class="stat-item"><div class="num" id="statBoxes">0</div><div class="label">Boxes in stock</div></div>
         <div class="stat-item low"><div class="num" id="statLow">0</div><div class="label">Low stock</div></div>
+        <div class="stat-item quick-check-item" id="quickCheckCard"></div>
       </div>
     </section>
 
@@ -1796,7 +1809,7 @@ function mergeData(base, local, remote){
       rs.looseCount = ls.looseCount;
     }
     if((ls.updatedAt||0) > (rs.updatedAt||0)){
-      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location','ordered','orderedAt','lowSince'].forEach(k=>{
+      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location','ordered','orderedAt','lowSince','lastVerifiedAt','verifyCount'].forEach(k=>{
         if(ls[k] !== undefined) rs[k] = ls[k];
       });
       rs.updatedAt = ls.updatedAt;
@@ -2746,6 +2759,7 @@ function removeBarcodeFromEditingSku(index){
 function closeEditModal(){
   document.getElementById('editOverlay').classList.remove('open');
   editingSkuId = null;
+  quickCheckPendingEditId = null; // cancelling shouldn't count as verifying anything
 }
 function saveEditModal(){
   const sku = data.skus[editingSkuId];
@@ -2771,6 +2785,17 @@ function saveEditModal(){
   if(newLoose !== sku.looseCount){ logEvent(sku.id, 'adjust_loose', newLoose - sku.looseCount, 'manual'); sku.looseCount = newLoose; }
 
   sku.updatedAt = Date.now();
+
+  if(quickCheckPendingEditId === editingSkuId){
+    markSkuVerified(sku);
+    const qcState = ensureQuickCheckState();
+    qcState.count += 1;
+    if(!qcState.doneIds.includes(sku.id)) qcState.doneIds.push(sku.id);
+    qcState.currentId = null;
+    saveQuickCheckState();
+    quickCheckPendingEditId = null;
+  }
+
   saveData(); renderAll(); refreshAllDropdownSources(); closeEditModal();
   showUndoBar('Updated ' + skuLabel(sku));
 }
@@ -3167,6 +3192,112 @@ function renderDashboard(){
   document.getElementById('statSkus').textContent = skus.length;
   document.getElementById('statBoxes').textContent = skus.reduce((s,x)=>s+x.boxCount,0);
   document.getElementById('statLow').textContent = skus.filter(isLowStock).length;
+  renderQuickCheck();
+}
+
+/* ---------- Quick Check ----------
+   A tiny, no-pressure nudge to spot-verify inventory a piece at a time. Never
+   a task list, never nags, never tracked across people — just "if you have
+   10 seconds, here's one thing to glance at." Daily pacing and which items
+   were already shown today live in localStorage (this is about the person
+   at this screen right now, not a shared team quota); the actual
+   verification (lastVerifiedAt/verifyCount) is shared sku data, so once
+   someone verifies something, nobody else gets asked about it again soon. */
+const QUICK_CHECK_KEY = 'quickCheckDaily_v1';
+const QUICK_CHECK_DAILY_LIMIT = 3;
+let quickCheckState = null;
+let quickCheckPendingEditId = null; // set only when the Edit modal was opened via Quick Check's "No"
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function loadQuickCheckState(){
+  let s = null;
+  try{ s = JSON.parse(localStorage.getItem(QUICK_CHECK_KEY)); }catch(e){}
+  if(!s || s.date !== todayStr()) s = { date: todayStr(), count: 0, doneIds: [], currentId: null };
+  return s;
+}
+function saveQuickCheckState(){
+  try{ localStorage.setItem(QUICK_CHECK_KEY, JSON.stringify(quickCheckState)); }catch(e){}
+}
+function ensureQuickCheckState(){
+  if(!quickCheckState || quickCheckState.date !== todayStr()) quickCheckState = loadQuickCheckState();
+  return quickCheckState;
+}
+function markSkuVerified(sku){
+  sku.lastVerifiedAt = Date.now();
+  sku.verifyCount = (sku.verifyCount||0) + 1;
+  sku.updatedAt = Date.now();
+}
+function pickQuickCheckCandidate(state){
+  const pool = Object.values(data.skus).filter(s => !state.doneIds.includes(s.id));
+  if(!pool.length) return null;
+  const now = Date.now();
+  const cutoff = now - 90*24*60*60*1000;
+  const activity = {};
+  data.events.forEach(ev=>{ if(ev.timestamp >= cutoff) activity[ev.skuId] = (activity[ev.skuId]||0) + 1; });
+
+  let best = null, bestScore = -Infinity;
+  pool.forEach(sku=>{
+    let score = 0;
+    if(!sku.lastVerifiedAt){
+      score += 1000; // never verified — top priority
+    } else {
+      const daysSince = (now - sku.lastVerifiedAt) / 86400000;
+      score += Math.min(365, daysSince) * 10; // the longer since verified, the more it's due
+      if(daysSince < 3) score -= 300; // verified very recently — let it rest a while
+    }
+    score += Math.min(50, activity[sku.id]||0) * 5; // frequently used/scanned/edited matters more
+    score += Math.min(50, (sku.boxCount||0) + (sku.looseCount||0)); // higher-volume stock matters more
+    if((now - (sku.updatedAt||0)) < 24*60*60*1000) score -= 400; // just touched — no need to re-ask immediately
+    if(score > bestScore){ bestScore = score; best = sku; }
+  });
+  return best;
+}
+function renderQuickCheck(){
+  const el = document.getElementById('quickCheckCard');
+  if(!el || !data) return;
+  const state = ensureQuickCheckState();
+
+  if(state.count >= QUICK_CHECK_DAILY_LIMIT){
+    el.innerHTML = `<div class="qc-label">Quick Check</div><div class="qc-done">&#9989; <strong>Thanks!</strong><br>That's enough for today.</div>`;
+    return;
+  }
+
+  let sku = state.currentId ? data.skus[state.currentId] : null;
+  if(!sku || state.doneIds.includes(sku.id)){
+    sku = pickQuickCheckCandidate(state);
+    state.currentId = sku ? sku.id : null;
+    saveQuickCheckState();
+  }
+
+  if(!sku){
+    el.innerHTML = `<div class="qc-label">Quick Check</div><div class="qc-empty">Nothing to check yet.</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="qc-label">Quick Check</div>
+    <div class="qc-name" title="${escapeHtml(skuLabel(sku))}">${escapeHtml(skuLabel(sku))}</div>
+    <div class="qc-expected">Expected: ${sku.boxCount} sealed box${sku.boxCount!==1?'es':''}</div>
+    <div class="qc-actions">
+      <button class="qc-btn yes" onclick="quickCheckYes('${jsStr(sku.id)}')">&#10003; Yes</button>
+      <button class="qc-btn no" onclick="quickCheckNo('${jsStr(sku.id)}')">&#10007; No</button>
+    </div>`;
+}
+function quickCheckYes(id){
+  const sku = data.skus[id];
+  const state = ensureQuickCheckState();
+  if(sku){
+    markSkuVerified(sku);
+    saveData();
+  }
+  state.count += 1;
+  if(!state.doneIds.includes(id)) state.doneIds.push(id);
+  state.currentId = null;
+  saveQuickCheckState();
+  renderQuickCheck(); // just this card — keep the transition light, no full re-render
+}
+function quickCheckNo(id){
+  quickCheckPendingEditId = id;
+  editSku(id); // reuses the existing Edit modal — verification is applied on save, see saveEditModal()
 }
 function isUsageEvent(ev){
   return ev.action === 'scan_out' || ev.action === 'scan_out_no_box' || ev.action === 'open_box';

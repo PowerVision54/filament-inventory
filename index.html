@@ -630,7 +630,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.13</div>
+    <div class="sub">V0.14</div>
   </div>
 </header>
 
@@ -961,6 +961,14 @@
         <button class="btn" onclick="manualGhSync()">Sync now</button>
         <button class="btn" onclick="openGhConnectionModal()">Change GitHub connection</button>
       </div>
+    </section>
+    <section>
+      <h2>Share access</h2>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Generates a link with this connection already filled in, so someone new can open it and land straight in the app instead of typing owner/repo/path/token by hand. Opening the link fills the connection in automatically; on a browser that isn't connected to anything yet, it connects right away with no extra click.</p>
+      <div class="footer-row">
+        <button class="btn" onclick="copyGhShareLink()">Copy share link</button>
+      </div>
+      <p class="footer-note" style="margin-bottom:0;">The link carries the token in plain text — treat it like a password. Prefer minting a separate token per person (Change GitHub connection) so any one link can be revoked later without breaking everyone else's.</p>
     </section>
     <section>
       <h2>Export to CSV</h2>
@@ -1556,6 +1564,51 @@ function base64ToUtf8(b64){
   for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
   return new TextDecoder().decode(bytes);
 }
+
+/* ---------- Share link ----------
+   Packs the current GitHub connection (owner/repo/path/token) into the URL
+   fragment so someone new can open a link instead of typing four fields by
+   hand. The fragment (everything after #) is never sent to any server —
+   only this browser ever sees it — but it still IS the token in plain text,
+   so it's scrubbed out of the address bar the instant it's read, and every
+   copy is gated behind an explicit warning. */
+function toBase64Url(b64){ return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function fromBase64Url(s){
+  s = s.replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length % 4) s += '=';
+  return s;
+}
+function buildGhShareLink(){
+  const payload = JSON.stringify({ o: ghConfig.owner, r: ghConfig.repo, p: ghConfig.path, t: ghConfig.token });
+  return location.origin + location.pathname + '#connect=' + toBase64Url(utf8ToBase64(payload));
+}
+function copyGhShareLink(){
+  if(!hasGhConfig()){ toast('Connect to GitHub first — the link is built from your current connection'); return; }
+  const proceed = confirm(
+    "This link contains your GitHub token in plain text. Anyone who has it can read and change this shared data — treat it exactly like a password.\n\n" +
+    "Only send it somewhere private (not a public channel), avoid pasting it anywhere it might get logged, and consider using a separate token per person so any one link can be revoked later without affecting anyone else.\n\n" +
+    "Copy the link now?"
+  );
+  if(!proceed) return;
+  const link = buildGhShareLink();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(()=>toast('Share link copied — send it somewhere private')).catch(()=>toast('Could not copy — try again'));
+  } else {
+    toast('Clipboard not available in this browser');
+  }
+}
+function consumeShareLinkIfPresent(){
+  const m = (location.hash || '').match(/^#connect=(.+)$/);
+  if(!m) return null;
+  // Scrub it from the address bar / this tab's history immediately,
+  // whether or not it turns out to parse — it shouldn't linger either way.
+  history.replaceState(null, '', location.pathname + location.search);
+  try{
+    const parsed = JSON.parse(base64ToUtf8(fromBase64Url(m[1])));
+    if(!parsed || !parsed.o || !parsed.r || !parsed.t) return null;
+    return { owner: parsed.o, repo: parsed.r, path: parsed.p || 'inventory-data.json', token: parsed.t };
+  }catch(e){ return null; }
+}
 async function ghFetchFile(){
   let res;
   try{
@@ -2076,6 +2129,30 @@ function saveGhSetupForm(){
   initApp();
 }
 async function initApp(){
+  const sharedConfig = consumeShareLinkIfPresent();
+  if(sharedConfig){
+    if(hasGhConfig()){
+      // Already connected to something on this browser — don't silently
+      // switch away from it. Pre-fill the reconnect form instead, so one
+      // deliberate click confirms the switch.
+      showGhGate();
+      renderGhGateSetup(true);
+      setTimeout(()=>{
+        const o=document.getElementById('ghs_owner'), r=document.getElementById('ghs_repo'),
+              p=document.getElementById('ghs_path'), t=document.getElementById('ghs_token');
+        if(o) o.value = sharedConfig.owner;
+        if(r) r.value = sharedConfig.repo;
+        if(p) p.value = sharedConfig.path;
+        if(t) t.value = sharedConfig.token;
+      }, 30);
+      return;
+    }
+    // Nothing connected yet on this browser — this is exactly the "open the
+    // link and land in the app" case, so connect right away, no extra click.
+    ghConfig = sharedConfig;
+    saveGhConfigToStorage();
+    ghSha = null;
+  }
   if(!hasGhConfig()){
     showGhGate();
     renderGhGateSetup(false);

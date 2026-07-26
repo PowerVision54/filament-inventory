@@ -598,7 +598,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.8</div>
+    <div class="sub">V0.10</div>
   </div>
 </header>
 
@@ -720,7 +720,7 @@
         </label>
         <div class="field-row" style="margin-top:10px;">
           <div class="field"><label>Weight per box (kg)</label><input type="number" id="q_weightPerBox" value="1" min="0" step="0.05"></div>
-          <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="q_purchaseUrl" placeholder="https://..."></div>
+          <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="q_purchaseUrl" placeholder="https://..." oninput="delete this.dataset.autofilled;"></div>
         </div>
         <p class="footer-note" style="margin:8px 0 0 0;">These settings only apply if this creates a new filament entry — adding to an existing one keeps its current settings.</p>
         <div id="qMatchSuggestions" class="q-suggestions" style="display:none;"></div>
@@ -957,12 +957,12 @@
     <div class="modal-sub">This barcode hasn't been logged before. Fill this in once — future scans handle themselves.</div>
     <div class="field"><label>Barcode</label><input type="text" id="f_barcode" readonly></div>
     <div class="field-row">
-      <div class="field"><label>Brand</label><input type="text" id="f_brand" list="brandList" placeholder="Bambu Lab"></div>
-      <div class="field"><label>Material</label><input type="text" id="f_material" list="materialList" placeholder="PLA Basic"></div>
+      <div class="field"><label>Brand</label><input type="text" id="f_brand" list="brandList" placeholder="Bambu Lab" oninput="handleNewBarcodeFieldsChanged()"></div>
+      <div class="field"><label>Material</label><input type="text" id="f_material" list="materialList" placeholder="PLA Basic" oninput="handleNewBarcodeFieldsChanged()"></div>
     </div>
-    <div class="field"><label>Color</label><select id="f_colorPreset" onchange="handleColorPresetChange('f')"></select></div>
+    <div class="field"><label>Color</label><select id="f_colorPreset" onchange="handleColorPresetChange('f'); handleNewBarcodeFieldsChanged();"></select></div>
     <div class="custom-color-row" id="f_customColorRow">
-      <div class="field" style="flex:1;"><label>Custom color name</label><input type="text" id="f_colorNameCustom" placeholder="Galaxy Purple"></div>
+      <div class="field" style="flex:1;"><label>Custom color name</label><input type="text" id="f_colorNameCustom" placeholder="Galaxy Purple" oninput="handleNewBarcodeFieldsChanged()"></div>
       <div class="field" style="max-width:70px;"><label>Swatch</label><input type="color" id="f_colorHexCustom" value="#808080" style="padding:2px;height:38px;"></div>
     </div>
     <div class="field-row" style="margin-top:10px;">
@@ -975,7 +975,7 @@
     <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
     <div class="field-row" style="margin-top:10px;">
       <div class="field"><label>Weight per box (kg)</label><input type="number" id="f_weightPerBox" value="1" min="0" step="0.05"></div>
-      <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_purchaseUrl" placeholder="https://..."></div>
+      <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_purchaseUrl" placeholder="https://..." oninput="delete this.dataset.autofilled;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeSkuModal()">Cancel</button>
@@ -1217,6 +1217,117 @@ const DEFAULT_COLORS = [
   {name:'Clear / Translucent', hex:'#dcdcdc'}, {name:'Glow in the Dark', hex:'#b6f2b6'}
 ];
 
+// Bambu Lab's color lineup per material, each with its official purchase
+// link. Used two ways: seedBambuColorsIfNeeded adds the color names as
+// pick-list options (once, no filament entries created), and
+// applyPurchaseUrlAutofill fills in the link live once someone actually
+// picks Bambu Lab + a listed material + one of its colors. Keyed by material
+// name (case-insensitive lookup) so more Bambu materials can be added later
+// just by adding another entry here.
+const BAMBU_COLOR_SEED = {
+  'pla basic': [
+    {name:'Jade White', hex:'#FFFFFF', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41078274687112'},
+    {name:'Orange', hex:'#FF6A13', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106672776'},
+    {name:'Blue', hex:'#0A5EB0', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41142110093448'},
+    {name:'Gray', hex:'#8E9089', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41211562819720'},
+    {name:'Beige', hex:'#D4C4A8', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106771080'},
+    {name:'Silver', hex:'#A6A9AA', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106803848'},
+    {name:'Yellow', hex:'#F4EE2A', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106836616'},
+    {name:'Blue Grey', hex:'#5B6579', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106869384'},
+    {name:'Pink', hex:'#F55A74', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106902152'},
+    {name:'Brown', hex:'#7D6556', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=40475106967688'},
+    {name:'Red', hex:'#C12E1F', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41078274621576'},
+    {name:'Black', hex:'#000000', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41078274654344'},
+    {name:'Bambu Green', hex:'#00AE42', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41884190146696'},
+    {name:'Bronze', hex:'#8A6E4B', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41884190703752'},
+    {name:'Gold', hex:'#D4AF37', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41884191195272'},
+    {name:'Purple', hex:'#6E43B4', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41884191752328'},
+    {name:'Magenta', hex:'#EC008C', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=41884192211080'},
+    {name:'Cyan', hex:'#0086D6', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43257238749320'},
+    {name:'Mistletoe Green', hex:'#3F8E43', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43257238290568'},
+    {name:'Light Gray', hex:'#D1D3D4', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=42844628975752'},
+    {name:'Dark Gray', hex:'#4D4D4F', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=42844629008520'},
+    {name:'Maroon Red', hex:'#9D2235', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43045591679112'},
+    {name:'Sunflower Yellow', hex:'#FEC600', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=565815336288092161'},
+    {name:'Turquoise', hex:'#00B1B7', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43045596921992'},
+    {name:'Indigo Purple', hex:'#4C3B6B', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=565815336288092179'},
+    {name:'Bright Green', hex:'#7ED321', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43045598167176'},
+    {name:'Cocoa Brown', hex:'#6F4E37', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=565815336288092185'},
+    {name:'Hot Pink', hex:'#FF69B4', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=565815336288092173'},
+    {name:'Cobalt Blue', hex:'#0047AB', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=43045599215752'},
+    {name:'Pumpkin Orange', hex:'#FF7518', url:'https://us.store.bambulab.com/products/pla-basic-filament?id=565815336288092167'}
+  ],
+  'pla matte': [
+    {name:'Matte Ivory White', hex:'#F0EAD6', url:'https://us.store.bambulab.com/products/pla-matte?id=41078280159368'},
+    {name:'Matte Ash Gray', hex:'#9A9A92', url:'https://us.store.bambulab.com/products/pla-matte?id=41078280192136'},
+    {name:'Matte Mandarin Orange', hex:'#F28C28', url:'https://us.store.bambulab.com/products/pla-matte?id=42984890040456'},
+    {name:'Matte Sakura Pink', hex:'#F4C2C2', url:'https://us.store.bambulab.com/products/pla-matte?id=40489681879176'},
+    {name:'Matte Lemon Yellow', hex:'#F5E050', url:'https://us.store.bambulab.com/products/pla-matte?id=40489681911944'},
+    {name:'Matte Charcoal', hex:'#36454F', url:'https://us.store.bambulab.com/products/pla-matte?id=41078280126600'},
+    {name:'Matte Grass Green', hex:'#5DA130', url:'https://us.store.bambulab.com/products/pla-matte?id=40489681977480'},
+    {name:'Matte Latte Brown', hex:'#A67B5B', url:'https://us.store.bambulab.com/products/pla-matte?id=40489682010248'},
+    {name:'Matte Scarlet Red', hex:'#C41E3A', url:'https://us.store.bambulab.com/products/pla-matte?id=41078280061064'},
+    {name:'Matte Ice Blue', hex:'#A5D8DD', url:'https://us.store.bambulab.com/products/pla-matte?id=40489682075784'},
+    {name:'Matte Lilac Purple', hex:'#B399D4', url:'https://us.store.bambulab.com/products/pla-matte?id=40489682108552'},
+    {name:'Matte Marine Blue', hex:'#1B4F72', url:'https://us.store.bambulab.com/products/pla-matte?id=41078280093832'},
+    {name:'Matte Dark Red', hex:'#7A1F1F', url:'https://us.store.bambulab.com/products/pla-matte?id=41884207415432'},
+    {name:'Matte Dark Blue', hex:'#1A3A5C', url:'https://us.store.bambulab.com/products/pla-matte?id=41884207972488'},
+    {name:'Matte Dark Brown', hex:'#4A3728', url:'https://us.store.bambulab.com/products/pla-matte?id=41884208529544'},
+    {name:'Matte Dark Green', hex:'#2E4B2F', url:'https://us.store.bambulab.com/products/pla-matte?id=41884210233480'},
+    {name:'Matte Desert Tan', hex:'#D2B48C', url:'https://us.store.bambulab.com/products/pla-matte?id=42259062620296'},
+    {name:'Matte Bone White', hex:'#E3DAC9', url:'https://us.store.bambulab.com/products/pla-matte?id=43292383936648'},
+    {name:'Matte Plum', hex:'#6B3F5C', url:'https://us.store.bambulab.com/products/pla-matte?id=43292383969416'},
+    {name:'Matte Sky Blue', hex:'#7EC8E3', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384002184'},
+    {name:'Matte Apple Green', hex:'#8DB600', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384034952'},
+    {name:'Matte Dark Chocolate', hex:'#3B2412', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384067720'},
+    {name:'Matte Caramel', hex:'#AF6E4D', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384100488'},
+    {name:'Matte Terracotta', hex:'#C86B4C', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384133256'},
+    {name:'Matte Nardo Gray', hex:'#6E6E68', url:'https://us.store.bambulab.com/products/pla-matte?id=43292384166024'}
+  ]
+};
+function seedBambuColorsIfNeeded(d){
+  // Only adds color names as pick-list options — never creates a filament
+  // entry. The purchase link is filled in live, at the moment someone
+  // actually picks Bambu Lab + one of these materials + one of its colors
+  // (see lookupSeedPurchaseUrl / applyPurchaseUrlAutofill below).
+  if(d.settings.seedBambuColorsV2) return;
+  d.settings.seedBambuColorsV2 = true;
+  Object.values(BAMBU_COLOR_SEED).forEach(list=>{
+    list.forEach(c=>{
+      if(!d.settings.colors.some(x=>x.name.toLowerCase()===c.name.toLowerCase())){
+        d.settings.colors.push({name:c.name, hex:c.hex});
+      }
+    });
+  });
+  d.settings.colors.sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+}
+function lookupSeedPurchaseUrl(brand, material, colorName){
+  if((brand||'').trim().toLowerCase() !== 'bambu lab') return '';
+  const list = BAMBU_COLOR_SEED[(material||'').trim().toLowerCase()];
+  if(!list) return '';
+  const hit = list.find(c=>c.name.toLowerCase() === (colorName||'').trim().toLowerCase());
+  return hit ? hit.url : '';
+}
+// Fills a "where to buy" field with the known link once brand+material+color
+// match Bambu Lab PLA Basic — but only ever touches a field it filled in
+// itself (tracked via data-autofilled), so it can update/clear itself as the
+// selection changes without ever overwriting something the person typed.
+function applyPurchaseUrlAutofill(prefix, brand, material, colorName){
+  const field = document.getElementById(prefix + '_purchaseUrl');
+  if(!field) return;
+  const seedUrl = lookupSeedPurchaseUrl(brand, material, colorName);
+  const isOurs = field.dataset.autofilled === '1';
+  if(seedUrl){
+    if(!field.value.trim() || isOurs){
+      field.value = seedUrl;
+      field.dataset.autofilled = '1';
+    }
+  } else if(isOurs){
+    field.value = '';
+    delete field.dataset.autofilled;
+  }
+}
+
 const FAMILY_ORDER = ['PLA','PETG','ASA','TPU','Nylon','PC','PCTG','ABS','Support','Other'];
 const FAMILY_COLORS = {
   PLA:'#114735', PETG:'#AB6224', ASA:'#5F4B8B', TPU:'#2E6690', Nylon:'#A6433A',
@@ -1266,6 +1377,7 @@ function ensureSettingsDefaults(d){
   if(!d.settings.materials) d.settings.materials = DEFAULT_MATERIALS.slice();
   if(!d.settings.colors) d.settings.colors = DEFAULT_COLORS.map(c=>({...c}));
   if(!d.settings.issueCategories) d.settings.issueCategories = DEFAULT_ISSUE_CATEGORIES.slice();
+  seedBambuColorsIfNeeded(d);
   d.settings.brands.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   d.settings.materials.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   d.settings.colors.sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
@@ -2194,6 +2306,7 @@ function updateQuickAddPreview(){
   const brand = document.getElementById('q_brand').value.trim();
   const material = document.getElementById('q_material').value.trim();
   const color = resolveQColor();
+  applyPurchaseUrlAutofill('q', brand, material, color.name);
   const preview = document.getElementById('qMatchPreview');
   const sugBox = document.getElementById('qMatchSuggestions');
 
@@ -2374,6 +2487,7 @@ function addManualEntry(){
   document.getElementById('q_threshold').disabled = false;
   document.getElementById('q_disableLowStock').checked = false;
   document.getElementById('q_weightPerBox').value = 1;
+  delete document.getElementById('q_purchaseUrl').dataset.autofilled;
   document.getElementById('q_purchaseUrl').value = '';
   document.getElementById('q_location').value = '';
   document.getElementById('q_customColorRow').classList.remove('show');
@@ -2450,9 +2564,16 @@ function openSkuModal(barcode){
   document.getElementById('f_threshold').disabled = false;
   document.getElementById('f_disableLowStock').checked = false;
   document.getElementById('f_weightPerBox').value = 1;
+  delete document.getElementById('f_purchaseUrl').dataset.autofilled;
   document.getElementById('f_purchaseUrl').value = '';
   document.getElementById('f_location').value = '';
   setTimeout(()=>document.getElementById('f_brand').focus(), 50);
+}
+function handleNewBarcodeFieldsChanged(){
+  const brand = document.getElementById('f_brand').value;
+  const material = document.getElementById('f_material').value;
+  const color = resolveColor('f');
+  applyPurchaseUrlAutofill('f', brand, material, color.name);
 }
 function closeSkuModal(){
   document.getElementById('skuOverlay').classList.remove('open');

@@ -578,7 +578,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.6</div>
+    <div class="sub">V0.7</div>
   </div>
 </header>
 
@@ -1533,7 +1533,15 @@ function mergeLogArrays(baseArr, localArr, remoteArr, preferFlag){
     .filter(x=> localIds.has(x.id) || !baseIds.has(x.id)) // drop entries deleted locally
     .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
 }
+// Populated by mergeData with plain-English notes about anything it had to
+// drop (e.g. a pending edit to something someone else deleted). Callers
+// check this right after merging and fold it into the toast they show.
+let lastMergeDroppedNotes = [];
+function noteDroppedEdit(label){
+  lastMergeDroppedNotes.push(label + ' was removed on one device while being changed on another — the change wasn\'t applied');
+}
 function mergeData(base, local, remote){
+  lastMergeDroppedNotes = [];
   const merged = JSON.parse(JSON.stringify(remote));
   ensureSettingsDefaults(merged);
   const b = base || {};
@@ -1545,19 +1553,34 @@ function mergeData(base, local, remote){
   merged.scanLog = mergeLogArrays(b.scanLog, local.scanLog, merged.scanLog, 'undone').slice(-20);
   merged.printerLog = mergeLogArrays(b.printerLog, local.printerLog, merged.printerLog, 'resolved');
 
-  // Skus deleted locally since the base: deletion wins unless the remote
-  // copy was edited after our base (edit beats delete).
+  // Sku deletions: whichever side deleted a record wins — a plain edit
+  // (checkout, scan, count/field adjustment) never changes createdAt, so a
+  // stale edit made without knowing the record was deleted can't
+  // accidentally undo that deletion just because it has a newer timestamp.
+  // The one exception is re-registering the same barcode after deleting it —
+  // that produces a genuinely new object (fresh createdAt) sharing the old
+  // id, which is a real "un-delete" and should survive.
+  const sameSkuRecord = (a, c) => a && c && a.createdAt === c.createdAt;
   Object.keys(merged.skus).forEach(id=>{
-    if(bSkus[id] && !localSkus[id]){
-      if((merged.skus[id].updatedAt||0) <= (bSkus[id].updatedAt||0)) delete merged.skus[id];
+    if(bSkus[id] && !localSkus[id] && sameSkuRecord(bSkus[id], merged.skus[id])){
+      // We deleted this filament; the remote copy may carry an edit someone
+      // made without knowing that — note it, then let the deletion stand.
+      if(merged.skus[id].updatedAt > bSkus[id].updatedAt){
+        noteDroppedEdit(skuLabel(merged.skus[id]));
+      }
+      delete merged.skus[id];
     }
   });
   Object.values(localSkus).forEach(ls=>{
     const rs = merged.skus[ls.id];
     const bs = bSkus[ls.id];
     if(!rs){
-      if(!bs){ merged.skus[ls.id] = ls; }                       // created locally
-      else if((ls.updatedAt||0) > (bs.updatedAt||0)){ merged.skus[ls.id] = ls; } // deleted remotely but edited locally
+      if(!bs || !sameSkuRecord(bs, ls)){
+        merged.skus[ls.id] = ls; // created locally, or re-registered after a deletion
+      } else if(ls.updatedAt > bs.updatedAt){
+        // Same record remote already deleted; we only had a plain edit to it.
+        noteDroppedEdit(skuLabel(bs));
+      }
       return;
     }
     if(bs){
@@ -1576,18 +1599,27 @@ function mergeData(base, local, remote){
     rs.barcodes = [...new Set([...(rs.barcodes||[]), ...(ls.barcodes||[])])];
   });
 
+  // Printer deletions always win outright — printer ids are always freshly
+  // random (never reused), so there's no "re-registered the same id" case to
+  // preserve the way there is for skus keyed by barcode.
   Object.keys(merged.printers).forEach(id=>{
     if(bPrinters[id] && !(local.printers||{})[id]){
-      if((merged.printers[id].updatedAt||0) <= (bPrinters[id].updatedAt||0)){
-        delete merged.printers[id];
-        merged.printerLog = merged.printerLog.filter(l=>l.printerId !== id);
+      // We deleted this printer; the remote copy may carry an edit someone
+      // made without knowing that — note it, then let the deletion stand.
+      if(merged.printers[id].updatedAt > bPrinters[id].updatedAt){
+        noteDroppedEdit(merged.printers[id].name);
       }
+      delete merged.printers[id];
     }
   });
   Object.values(local.printers || {}).forEach(lp=>{
     const rp = merged.printers[lp.id];
+    const bp = bPrinters[lp.id];
     if(!rp){
-      if(!bPrinters[lp.id]) merged.printers[lp.id] = lp;
+      if(!bp){ merged.printers[lp.id] = lp; } // created locally
+      else if(lp.updatedAt > bp.updatedAt){
+        noteDroppedEdit(lp.name);
+      }
       return;
     }
     if((lp.updatedAt||0) > (rp.updatedAt||0)){
@@ -1595,6 +1627,10 @@ function mergeData(base, local, remote){
       rp.updatedAt = lp.updatedAt;
     }
   });
+  // Removing a printer also removes its history elsewhere in the app —
+  // keep that true here too, rather than leaving orphaned log rows behind.
+  const survivingPrinterIds = new Set(Object.keys(merged.printers));
+  merged.printerLog = merged.printerLog.filter(l=>survivingPrinterIds.has(l.printerId));
 
   const localSettings = local.settings || {};
   ['brands','materials','issueCategories','printerGroups'].forEach(k=>{
@@ -1610,6 +1646,9 @@ function mergeData(base, local, remote){
 
   ensureSettingsDefaults(merged); // re-sort lists, backfill anything missing
   return merged;
+}
+function mergeNoticeSuffix(){
+  return lastMergeDroppedNotes.length ? (' Heads up: ' + lastMergeDroppedNotes.join('; ') + '.') : '';
 }
 function adoptMergedData(remote, merged, message){
   setGhBase(JSON.stringify(remote.json));
@@ -1659,7 +1698,7 @@ async function handleSyncConflict(){
     try{
       const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
       const merged = mergeData(base, data, remote.json);
-      adoptMergedData(remote, merged, "Combined your changes with a teammate's");
+      adoptMergedData(remote, merged, "Combined your changes with a teammate's." + mergeNoticeSuffix());
       return;
     }catch(mergeErr){
       console.error('Automatic sync merge failed, falling back to manual refresh', mergeErr);
@@ -1690,7 +1729,8 @@ async function pollGhStaleness(){
       if(localCacheWasDirty()){
         try{
           const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
-          adoptMergedData(remote, mergeData(base, data, remote.json), 'Reconnected — syncing your offline changes');
+          const merged = mergeData(base, data, remote.json);
+          adoptMergedData(remote, merged, 'Reconnected — syncing your offline changes.' + mergeNoticeSuffix());
           return;
         }catch(e){ console.error('Reconnect merge failed', e); }
       }
@@ -1825,6 +1865,7 @@ async function initApp(){
   showGhGate();
   renderGhGateLoading();
   let startDirty = false;
+  let didMerge = false;
   try{
     const remote = await ghFetchFile();
     const cache = loadLocalCache();
@@ -1835,6 +1876,7 @@ async function initApp(){
         const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
         data = mergeData(base, cache, remote.json);
         startDirty = true;
+        didMerge = true;
       }catch(e){
         console.error('Could not recover unsynced local changes', e);
         data = remote.json;
@@ -1891,7 +1933,7 @@ async function initApp(){
   updateSyncStatusUI();
   startGhPolling();
   if(startDirty){
-    toast('Recovered unsynced changes from your last session');
+    toast('Recovered unsynced changes from your last session.' + (didMerge ? mergeNoticeSuffix() : ''));
     clearTimeout(ghSaveTimer);
     ghSaveTimer = setTimeout(flushGithubSave, 800);
   }
@@ -1902,7 +1944,10 @@ function toast(msg){
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(()=>t.classList.remove('show'), 2200);
+  // Longer messages (e.g. merge notices) get more time on screen instead of
+  // flashing by before they can be read.
+  const duration = Math.min(7000, Math.max(2200, msg.length * 60));
+  toast._timer = setTimeout(()=>t.classList.remove('show'), duration);
 }
 let undoSnapshot = null;
 let undoTimer = null;

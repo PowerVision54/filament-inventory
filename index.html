@@ -691,6 +691,18 @@
           <div class="field" style="flex:1;"><label>Custom color name</label><input type="text" id="q_colorNameCustom" placeholder="Galaxy Purple"></div>
           <div class="field" style="max-width:70px;"><label>Swatch</label><input type="color" id="q_colorHexCustom" value="#808080" style="padding:2px;height:38px;"></div>
         </div>
+        <div class="field-row" style="margin-top:10px;">
+          <div class="field"><label>Low stock threshold</label><input type="number" id="q_threshold" value="2" min="0"></div>
+          <div class="field"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="q_location" placeholder="e.g. Shelf 2, Bin B"></div>
+        </div>
+        <label class="toggle-chip" style="margin-top:10px;">
+          <input type="checkbox" id="q_disableLowStock" onchange="document.getElementById('q_threshold').disabled=this.checked"> Barely used — don't warn on low stock
+        </label>
+        <div class="field-row" style="margin-top:10px;">
+          <div class="field"><label>Weight per box (kg)</label><input type="number" id="q_weightPerBox" value="1" min="0" step="0.05"></div>
+          <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="q_purchaseUrl" placeholder="https://..."></div>
+        </div>
+        <p class="footer-note" style="margin:8px 0 0 0;">These settings only apply if this creates a new filament entry — adding to an existing one keeps its current settings.</p>
         <div id="qMatchSuggestions" class="q-suggestions" style="display:none;"></div>
         <div id="qMatchPreview" class="footer-note" style="margin:8px 0 0 0;min-height:16px;"></div>
         <div class="form-actions"><button class="btn primary" onclick="addManualEntry()">Add to inventory</button></div>
@@ -940,11 +952,11 @@
     <label class="toggle-chip" style="margin-top:10px;">
       <input type="checkbox" id="f_disableLowStock" onchange="document.getElementById('f_threshold').disabled=this.checked"> Barely used — don't warn on low stock
     </label>
+    <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
     <div class="field-row" style="margin-top:10px;">
       <div class="field"><label>Weight per box (kg)</label><input type="number" id="f_weightPerBox" value="1" min="0" step="0.05"></div>
       <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_purchaseUrl" placeholder="https://..."></div>
     </div>
-    <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeSkuModal()">Cancel</button>
       <button class="btn primary" onclick="saveSkuModal()">Save</button>
@@ -2196,6 +2208,11 @@ function addManualEntry(){
   const color = resolveQColor();
   const qty = Math.max(1, parseInt(document.getElementById('q_qty').value) || 1);
   const barcode = document.getElementById('q_barcode').value.trim();
+  const threshold = Math.max(0, parseInt(document.getElementById('q_threshold').value) || 0);
+  const disableLowStock = document.getElementById('q_disableLowStock').checked;
+  const weightPerBoxKg = Math.max(0, parseFloat(document.getElementById('q_weightPerBox').value)) || 1;
+  const purchaseUrl = normalizeUrl(document.getElementById('q_purchaseUrl').value);
+  const location = document.getElementById('q_location').value.trim();
 
   if(!brand || !material || !color.name){
     toast('Brand, material, and color are required');
@@ -2221,7 +2238,9 @@ function addManualEntry(){
       id, barcodes: barcode ? [barcode] : [], brand, material, colorName: color.name, colorHex: color.hex,
       boxCount: qState==='box' ? qty : 0,
       looseCount: qState==='loose' ? qty : 0,
-      lowStockThreshold: data.settings.defaultThreshold,
+      lowStockThreshold: threshold,
+      lowStockDisabled: disableLowStock,
+      weightPerBoxKg, purchaseUrl, location,
       createdAt: Date.now(), updatedAt: Date.now()
     };
     data.skus[id] = sku;
@@ -2237,6 +2256,12 @@ function addManualEntry(){
   document.getElementById('q_material').value='';
   document.getElementById('q_barcode').value='';
   document.getElementById('q_qty').value=1;
+  document.getElementById('q_threshold').value = data.settings.defaultThreshold;
+  document.getElementById('q_threshold').disabled = false;
+  document.getElementById('q_disableLowStock').checked = false;
+  document.getElementById('q_weightPerBox').value = 1;
+  document.getElementById('q_purchaseUrl').value = '';
+  document.getElementById('q_location').value = '';
   document.getElementById('q_customColorRow').classList.remove('show');
   qColorIsCustom = false;
   qColorTouched = false;

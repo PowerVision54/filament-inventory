@@ -656,7 +656,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.18</div>
+    <div class="sub">V0.20</div>
   </div>
 </header>
 
@@ -1519,6 +1519,14 @@ function ensureSettingsDefaults(d){
     if(sku.weightPerBoxKg === undefined) sku.weightPerBoxKg = 1;
     if(sku.purchaseUrl === undefined) sku.purchaseUrl = '';
     if(sku.location === undefined) sku.location = '';
+    // One-time backfill for filaments that predate the target stock field —
+    // same rule as the Edit modal's suggested default. Only fires once per
+    // sku (it's a no-op once targetStock is actually set, including to 0
+    // by an explicit user edit — Math.max/undefined check below only looks
+    // at "was it ever set", not its value).
+    if(sku.targetStock === undefined){
+      sku.targetStock = sku.favorite ? 10 : Math.max(1, (sku.lowStockThreshold||0) * 2);
+    }
   });
   Object.values(d.printers)
     .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
@@ -2891,7 +2899,8 @@ async function editSku(id){
   document.getElementById('e_location').value = sku.location || '';
   document.getElementById('e_notes').value = sku.notes || '';
   document.getElementById('e_threshold').value = sku.lowStockThreshold;
-  document.getElementById('e_targetStock').value = sku.targetStock || '';
+  const defaultTargetStock = sku.favorite ? 10 : Math.max(1, (sku.lowStockThreshold||0) * 2);
+  document.getElementById('e_targetStock').value = sku.targetStock || defaultTargetStock;
   document.getElementById('e_disableLowStock').checked = !!sku.lowStockDisabled;
   document.getElementById('e_threshold').disabled = !!sku.lowStockDisabled;
   document.getElementById('e_weightPerBox').value = sku.weightPerBoxKg || 1;
@@ -4073,8 +4082,12 @@ function renderReorderReport(){
 function copyReorderReport(){
   const rows = computeReorderRows();
   if(!rows.length){ toast('Nothing needs reordering right now'); return; }
-  const lines = rows.map(r=>`${skuLabel(r.sku)} — ${effectivePurchaseUrl(r.sku) || 'no link'}`);
-  const text = lines.join('\n');
+  const lines = rows.map(r=>{
+    const qty = recommendedReorderQty(r.sku);
+    const link = effectivePurchaseUrl(r.sku) || 'no link';
+    return `${qty > 0 ? qty + ' of ' : ''}${skuLabel(r.sku)} — ${link}`;
+  });
+  const text = lines.join('\n\n');
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard')).catch(()=>toast('Could not copy — try again'));
   } else {

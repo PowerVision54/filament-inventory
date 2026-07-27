@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
 <title>3D Printer Filament Inventory System</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23114735'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23E7EFEA' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23E7EFEA'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -175,6 +176,10 @@
     padding:7px 10px;border-radius:6px;border:1px solid var(--border);
     background:var(--input-bg);font-size:12.5px;color:var(--text-muted);user-select:none;
   }
+  .notes-input{
+    width:100%;resize:vertical;font-family:inherit;font-size:13px;
+    padding:8px 9px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);
+  }
   .toggle-chip input{margin:0;}
 
   table{width:100%;border-collapse:collapse;}
@@ -194,7 +199,11 @@
   .prod-name{font-weight:600;}
   .prod-meta-line{font-size:10.5px;color:var(--text-muted);display:block;margin-top:1px;margin-left:18px;}
   .prod-meta-line .prod-barcode-inline{font-family:'IBM Plex Mono',monospace;}
+  .prod-notes{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .filament-cell{display:flex;align-items:flex-start;}
+  .fav-star{background:none;border:none;cursor:pointer;font-size:16px;line-height:1;color:var(--text-muted);padding:0 4px 0 0;margin-top:1px;}
+  .fav-star.on{color:#d4af37;}
+  .fav-star:hover{color:#d4af37;}
   .count-cell{display:flex;align-items:center;gap:6px;}
   .count-cell .count-num{font-family:'IBM Plex Mono',monospace;font-weight:700;min-width:16px;text-align:center;font-size:13px;}
   .stepper{
@@ -352,6 +361,15 @@
     background:var(--input-bg);font-size:13px;cursor:pointer;
     display:flex;align-items:center;gap:7px;
   }
+  .hover-dd-display.color-unselected{border-color:var(--danger);}
+  .color-input-row{
+    display:flex;align-items:center;gap:7px;width:100%;
+    padding:0 9px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);
+  }
+  .color-input-row input{flex:1;border:none;background:transparent;padding:8px 0;font-size:13px;}
+  .color-input-row input:focus{outline:none;}
+  .color-input-row.color-unselected{border-color:var(--danger);}
+  .color-input-row .swatch{flex-shrink:0;}
   .hover-dd-list{
     position:absolute;top:100%;left:0;right:0;margin-top:0;
     background:#fff;border:1px solid var(--border);border-radius:6px;
@@ -517,6 +535,14 @@
     border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;flex-shrink:0;
   }
   .toast-item .undo-btn:hover{background:rgba(255,255,255,0.28);}
+  .toast-item.dismissible-item{
+    padding:10px 10px 10px 16px;display:flex;align-items:center;gap:10px;pointer-events:auto;
+  }
+  .toast-item .toast-close-btn{
+    background:none;border:none;color:#fff;opacity:0.7;font-size:16px;line-height:1;
+    padding:0 2px;flex-shrink:0;cursor:pointer;
+  }
+  .toast-item .toast-close-btn:hover{opacity:1;}
 
   .gh-gate{
     position:fixed;inset:0;background:var(--bg);z-index:300;
@@ -630,7 +656,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.16</div>
+    <div class="sub">V0.18</div>
   </div>
 </header>
 
@@ -671,6 +697,7 @@
           <div class="hover-dd-list" id="materialFilterList"></div>
         </div>
         <label class="toggle-chip"><input type="checkbox" id="lowOnlyToggle" onchange="renderInventory()"> Low stock only</label>
+        <label class="toggle-chip"><input type="checkbox" id="favOnlyToggle" onchange="renderInventory()"> &#9733; Favorites only</label>
       </div>
       <div class="bulk-bar" id="bulkBar" style="display:none;">
         <span id="bulkBarCount">0 selected</span>
@@ -720,20 +747,20 @@
           <div class="field">
             <label>Color</label>
             <div class="hover-dd">
-              <div class="hover-dd-display"><span class="swatch" id="q_color_swatch" style="background:#1a1a1a;"></span><span id="q_color_name">Black</span></div>
+              <div class="color-input-row color-unselected" id="q_color_display">
+                <span class="swatch" id="q_color_swatch" style="background:transparent;border:1px dashed var(--border);"></span>
+                <input type="text" id="q_color" placeholder="Type to search colors" autocomplete="off" oninput="handleQColorTyping()">
+              </div>
               <div class="hover-dd-list" id="q_color_list"></div>
             </div>
           </div>
           <div class="field">
-            <label>Currently</label>
-            <div class="radio-group" id="q_stateGroup">
-              <div class="radio-opt sel" data-val="box" onclick="selectQState('box')">In box</div>
-              <div class="radio-opt" data-val="loose" onclick="selectQState('loose')">Loose</div>
-            </div>
+            <label>Boxes (sealed)</label>
+            <input type="number" id="q_boxQty" value="1" min="0">
           </div>
           <div class="field">
-            <label>Quantity</label>
-            <input type="number" id="q_qty" value="1" min="1">
+            <label>Loose spools</label>
+            <input type="number" id="q_looseQty" value="0" min="0">
           </div>
           <div class="field">
             <label>Barcode <span style="font-weight:400;">(optional)</span></label>
@@ -887,14 +914,15 @@
         <h2>Reorder report</h2>
         <button class="btn" onclick="copyReorderReport()">Copy as text</button>
       </div>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Everything currently flagged low stock, most urgent first, with estimated runway and a link to reorder where saved. "In stock (kg)" counts sealed boxes only — loose spool weight isn't tracked. Mark something ordered to highlight it yellow here and in Inventory — it clears itself automatically once stock is back above threshold.</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Everything currently flagged low stock, most urgent first, with estimated runway and a link to reorder where saved. "In stock (kg)" counts sealed boxes only — loose spool weight isn't tracked. "Reorder qty" is the target stock you set in Edit (next to low stock threshold) minus what's on hand now — set to blank/0 for a filament and it just shows "—" here. Mark something ordered to highlight it yellow here and in Inventory — it clears itself automatically once stock is back above threshold.</p>
       <div class="log-row" style="border-bottom:2px solid var(--border);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:700;">
         <div style="flex:2;">Filament</div>
-        <div style="width:120px;text-align:right;">On hand</div>
-        <div style="width:70px;text-align:right;">Boxed kg</div>
-        <div style="width:70px;text-align:right;">Runway</div>
-        <div style="width:105px;text-align:right;">Buy</div>
-        <div style="width:150px;text-align:right;">Status</div>
+        <div style="width:100px;text-align:right;">On hand</div>
+        <div style="width:65px;text-align:right;">Boxed kg</div>
+        <div style="width:65px;text-align:right;">Runway</div>
+        <div style="width:90px;text-align:right;">Reorder qty</div>
+        <div style="width:90px;text-align:right;">Buy</div>
+        <div style="width:140px;text-align:right;">Status</div>
       </div>
       <div id="reorderList"></div>
       <div class="empty-state" id="reorderEmpty" style="display:none;">Nothing needs reordering right now.</div>
@@ -984,9 +1012,14 @@
         <button class="btn" onclick="exportData()">Export backup (JSON)</button>
         <button class="btn" onclick="document.getElementById('importFile').click()">Import backup</button>
         <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
-        <button class="btn danger" onclick="clearAllData()">Clear all data</button>
       </div>
       <p class="footer-note">The shared copy of this data lives in your private GitHub repo (see GitHub Sync above). This browser also keeps a local backup copy in case GitHub is briefly unreachable — export a JSON backup periodically for extra safety.</p>
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer;color:var(--text-muted);font-size:12.5px;">Danger zone</summary>
+        <div class="footer-row" style="margin-top:10px;">
+          <button class="btn danger" onclick="clearAllData()">Clear all data</button>
+        </div>
+      </details>
     </section>
     <section>
       <h2>Bulk cleanup</h2>
@@ -1016,7 +1049,7 @@
 </main>
 
 <div class="overlay" id="skuOverlay">
-  <div class="modal">
+  <div class="modal wide">
     <h3>New barcode</h3>
     <div class="modal-sub">This barcode hasn't been logged before. Fill this in once — future scans handle themselves.</div>
     <div class="field"><label>Barcode</label><input type="text" id="f_barcode" readonly></div>
@@ -1031,12 +1064,13 @@
     </div>
     <div class="field-row" style="margin-top:10px;">
       <div class="field"><label>Quantity</label><input type="number" id="f_qty" value="1" min="1"></div>
-      <div class="field"><label>Low stock threshold</label><input type="number" id="f_threshold" value="2" min="0"></div>
     </div>
-    <label class="toggle-chip" style="margin-top:10px;">
+    <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
+    <div class="field" style="margin-top:10px;"><label>Notes <span style="font-weight:400;">(optional)</span></label><textarea id="f_notes" class="notes-input" rows="2" placeholder="e.g. Switched from PETG HF to PolyMaker PETG"></textarea></div>
+    <div class="field" style="margin-top:10px;"><label>Low stock threshold</label><input type="number" id="f_threshold" value="2" min="0"></div>
+    <label class="toggle-chip" style="margin-top:8px;">
       <input type="checkbox" id="f_disableLowStock" onchange="document.getElementById('f_threshold').disabled=this.checked"> Barely used — don't warn on low stock
     </label>
-    <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_location" placeholder="e.g. Shelf 2, Bin B"></div>
     <div class="field-row" style="margin-top:10px;">
       <div class="field"><label>Weight per box (kg)</label><input type="number" id="f_weightPerBox" value="1" min="0" step="0.05"></div>
       <div class="field"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="f_purchaseUrl" placeholder="https://..." oninput="delete this.dataset.autofilled;"></div>
@@ -1066,7 +1100,11 @@
       <div class="field"><label>Loose</label><input type="number" id="e_looseCount" min="0"></div>
     </div>
     <div class="field" style="margin-top:10px;"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="e_location" placeholder="e.g. Shelf 2, Bin B"></div>
-    <div class="field" style="margin-top:10px;"><label>Low stock threshold (boxes)</label><input type="number" id="e_threshold" min="0"></div>
+    <div class="field" style="margin-top:10px;"><label>Notes <span style="font-weight:400;">(optional)</span></label><textarea id="e_notes" class="notes-input" rows="2" placeholder="e.g. Switched from PETG HF to PolyMaker PETG"></textarea></div>
+    <div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>Low stock threshold (boxes)</label><input type="number" id="e_threshold" min="0"></div>
+      <div class="field"><label>Target stock (boxes) <span style="font-weight:400;">(optional)</span></label><input type="number" id="e_targetStock" min="0" placeholder="e.g. 10"></div>
+    </div>
     <label class="toggle-chip" style="margin-top:8px;">
       <input type="checkbox" id="e_disableLowStock" onchange="document.getElementById('e_threshold').disabled=this.checked"> Barely used — don't warn on low stock
     </label>
@@ -1255,10 +1293,7 @@ let currentMode = 'out';
 let currentMaterialFilterFamily = '';
 let selectedSkuIds = new Set();
 let editingSkuId = null;
-let qState = 'box';
-let qSelectedColor = null;
 let qColorIsCustom = false;
-let qColorTouched = false;
 let printerLogSearchTerm = '';
 let masterPrinterLogLimit = 20;
 let currentPrinterMaintRange = 30;
@@ -1365,35 +1400,37 @@ function seedBambuColorsIfNeeded(d){
   });
   d.settings.colors.sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
 }
-// Amazon is where everything except Bambu Lab actually gets ordered from
-// here, and product links for that go stale often — a search link never
-// breaks, and gets within a click or two of the right listing.
-function amazonSearchUrl(brand, material, colorName){
+// A Google search link never breaks like a specific product URL can, and
+// gets within a click or two of the right listing for anything not bought
+// directly from Bambu's own store.
+function googleSearchUrl(brand, material, colorName){
   const parts = [brand, material, colorName].map(s=>(s||'').trim()).filter(Boolean);
   if(!parts.length) return '';
-  return 'https://www.amazon.com/s?k=' + encodeURIComponent(parts.join(' ')).replace(/%20/g, '+');
+  return 'https://www.google.com/search?q=' + encodeURIComponent(parts.join(' '));
 }
 function lookupDefaultPurchaseUrl(brand, material, colorName){
   const isBambu = (brand||'').trim().toLowerCase() === 'bambu lab';
   if(isBambu){
     const list = BAMBU_COLOR_SEED[(material||'').trim().toLowerCase()];
     const hit = list && list.find(c=>c.name.toLowerCase() === (colorName||'').trim().toLowerCase());
-    return hit ? hit.url : ''; // bought directly from Bambu — don't guess with an Amazon search
+    if(hit) return hit.url;
+    // Not every Bambu color/material has a saved catalog link — fall back
+    // to a Google search same as everything else instead of showing no link.
   }
-  return amazonSearchUrl(brand, material, colorName);
+  return googleSearchUrl(brand, material, colorName);
 }
 // The link actually used for a saved filament: whatever's explicitly saved,
-// else the same default (Bambu catalog link or Amazon search) the forms
+// else the same default (Bambu catalog link or Google search) the forms
 // autofill live. Used anywhere a "Buy" link is shown for an existing sku.
 function effectivePurchaseUrl(sku){
   if(isSafeHttpUrl(sku.purchaseUrl)) return sku.purchaseUrl;
   return lookupDefaultPurchaseUrl(sku.brand, sku.material, sku.colorName);
 }
-// True only for our own generated Amazon search links — used to label the
-// link "Search Amazon" instead of "Buy" (a real saved link or Bambu's own
-// catalog link both point somewhere specific and get the plain "Buy" label).
-function isAmazonSearchFallback(url){
-  return /^https:\/\/www\.amazon\.com\/s\?k=/.test(url || '');
+// True only for our own generated Google search links — used to label the
+// link "Search" instead of "Buy" (a real saved link or Bambu's own catalog
+// link both point somewhere specific and get the plain "Buy" label).
+function isSearchFallback(url){
+  return /^https:\/\/www\.google\.com\/search\?q=/.test(url || '');
 }
 // Fills a "where to buy" field with the known default once brand/material/
 // color are entered — but only ever touches a field it filled in itself
@@ -1887,7 +1924,7 @@ function mergeData(base, local, remote){
       rs.looseCount = ls.looseCount;
     }
     if((ls.updatedAt||0) > (rs.updatedAt||0)){
-      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','weightPerBoxKg','purchaseUrl','location','ordered','orderedAt','lowSince','lastVerifiedAt','verifyCount'].forEach(k=>{
+      ['brand','material','colorName','colorHex','lowStockThreshold','lowStockDisabled','targetStock','weightPerBoxKg','purchaseUrl','location','notes','favorite','ordered','orderedAt','lowSince','lastVerifiedAt','verifyCount'].forEach(k=>{
         if(ls[k] !== undefined) rs[k] = ls[k];
       });
       rs.updatedAt = ls.updatedAt;
@@ -2243,8 +2280,7 @@ async function initApp(){
         ghSha = null;
         ensureSettingsDefaults(data);
         hideGhGate();
-        qSelectedColor = { ...data.settings.colors[0] };
-        updateQColorDisplay();
+        updateColorSwatchState();
         refreshAllDropdownSources();
         renderAll();
         setSyncIndicatorState('error', 'Offline — local copy');
@@ -2265,8 +2301,7 @@ async function initApp(){
   ghLastSyncedAt = Date.now();
   saveLocalCache();
   hideGhGate();
-  qSelectedColor = { ...data.settings.colors[0] };
-  updateQColorDisplay();
+  updateColorSwatchState();
   refreshAllDropdownSources();
   renderAll();
   updateSyncStatusUI();
@@ -2301,10 +2336,16 @@ function removeToastItem(id){
 }
 function toast(msg){
   const el = document.createElement('div');
-  el.className = 'toast-item';
+  el.className = 'toast-item dismissible-item';
   const span = document.createElement('span');
   span.textContent = msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close-btn';
+  closeBtn.textContent = '×';
+  closeBtn.title = 'Dismiss';
+  closeBtn.onclick = ()=>removeToastItem(el.id);
   el.appendChild(span);
+  el.appendChild(closeBtn);
   // Longer messages (e.g. merge notices) get more time on screen instead of
   // flashing by before they can be read.
   const duration = Math.min(7000, Math.max(2200, msg.length * 60));
@@ -2508,7 +2549,7 @@ function updateQuickAddPreview(){
 
   const bq = brand.toLowerCase();
   const mq = material.toLowerCase();
-  const cq = (qColorTouched && color.name) ? color.name.toLowerCase() : '';
+  const cq = color.name ? color.name.toLowerCase() : '';
   const candidates = Object.values(data.skus)
     .filter(s=>{
       if(bq && !s.brand.toLowerCase().includes(bq)) return false;
@@ -2521,7 +2562,7 @@ function updateQuickAddPreview(){
 
   if(candidates.length){
     sugBox.style.display = 'block';
-    const label = qColorTouched ? 'Already in stock — tap to select' : 'Already in stock — tap to fill in the color';
+    const label = color.name ? 'Already in stock — tap to select' : 'Already in stock — tap to fill in the color';
     sugBox.innerHTML = '<div class="q-suggestions-label">' + label + '</div>' +
       candidates.map(s=>`
         <div class="q-suggestion-item" onclick="applyQSuggestion('${jsStr(s.id)}')">
@@ -2554,53 +2595,81 @@ function applyQSuggestion(id){
   document.getElementById('q_brand').value = sku.brand;
   document.getElementById('q_material').value = sku.material;
 
-  const presetMatch = data.settings.colors.find(c=>c.name.toLowerCase()===sku.colorName.toLowerCase());
-  qSelectedColor = presetMatch ? { ...presetMatch } : { name: sku.colorName, hex: sku.colorHex || '#808080' };
-  qColorTouched = true;
+  const presetMatch = findColorPreset(sku.colorName);
   if(presetMatch){
     qColorIsCustom = false;
+    document.getElementById('q_color').value = presetMatch.name;
     document.getElementById('q_customColorRow').classList.remove('show');
   } else {
     qColorIsCustom = true;
+    document.getElementById('q_color').value = sku.colorName;
     document.getElementById('q_colorNameCustom').value = sku.colorName;
     document.getElementById('q_colorHexCustom').value = sku.colorHex || '#808080';
     document.getElementById('q_customColorRow').classList.add('show');
   }
-  updateQColorDisplay();
+  renderQColorList();
+  updateColorSwatchState();
   renderQBrandList();
   renderQMaterialList();
   updateQuickAddPreview();
-  document.getElementById('q_qty').focus();
+  document.getElementById('q_boxQty').focus();
   toast('Filled in ' + skuLabel(sku));
 }
+function findColorPreset(name){
+  return data.settings.colors.find(c=>c.name.toLowerCase()===(name||'').trim().toLowerCase());
+}
 function renderQColorList(){
-  const items = data.settings.colors.map((c,i)=>`<div class="hover-dd-item" onclick="selectQColorByIndex(${i})"><span class="swatch" style="background:${safeHex(c.hex)}"></span>${escapeHtml(c.name)}</div>`).join('');
-  document.getElementById('q_color_list').innerHTML = items + `<div class="hover-dd-item custom-item" onclick="selectQColorCustom()">+ Custom color...</div>`;
+  const filter = document.getElementById('q_color').value.toLowerCase();
+  const items = data.settings.colors.filter(c=>!filter || c.name.toLowerCase().includes(filter));
+  document.getElementById('q_color_list').innerHTML =
+    items.map(c=>`<div class="hover-dd-item" onclick="selectQColorByName('${jsStr(c.name)}')"><span class="swatch" style="background:${safeHex(c.hex)}"></span>${escapeHtml(c.name)}</div>`).join('')
+    + `<div class="hover-dd-item custom-item" onclick="selectQColorCustom()">+ Custom color...</div>`;
 }
-function updateQColorDisplay(){
-  document.getElementById('q_color_swatch').style.background = qSelectedColor.hex;
-  document.getElementById('q_color_name').textContent = qSelectedColor.name;
+function updateColorSwatchState(){
+  const display = document.getElementById('q_color_display');
+  const swatch = document.getElementById('q_color_swatch');
+  const color = resolveQColor();
+  if(!color.name){
+    display.classList.add('color-unselected');
+    swatch.style.background = 'transparent';
+    swatch.style.border = '1px dashed var(--border)';
+    return;
+  }
+  display.classList.remove('color-unselected');
+  swatch.style.border = 'none';
+  swatch.style.background = color.hex || '#808080';
 }
-function selectQColorByIndex(i){
+function selectQColorByName(name){
   qColorIsCustom = false;
-  qColorTouched = true;
-  qSelectedColor = { ...data.settings.colors[i] };
-  updateQColorDisplay();
+  document.getElementById('q_color').value = name;
   document.getElementById('q_customColorRow').classList.remove('show');
+  renderQColorList();
+  updateColorSwatchState();
   updateQuickAddPreview();
+  document.getElementById('q_boxQty').focus();
 }
 function selectQColorCustom(){
   qColorIsCustom = true;
-  qColorTouched = true;
+  const typed = document.getElementById('q_color').value.trim();
   document.getElementById('q_customColorRow').classList.add('show');
+  if(typed && !document.getElementById('q_colorNameCustom').value) document.getElementById('q_colorNameCustom').value = typed;
   document.getElementById('q_colorNameCustom').focus();
+  updateColorSwatchState();
   updateQuickAddPreview();
 }
 function resolveQColor(){
   if(qColorIsCustom){
     return { name: document.getElementById('q_colorNameCustom').value.trim(), hex: document.getElementById('q_colorHexCustom').value };
   }
-  return { name: qSelectedColor.name, hex: qSelectedColor.hex };
+  const typed = document.getElementById('q_color').value.trim();
+  if(!typed) return { name: '', hex: '' };
+  const match = findColorPreset(typed);
+  return match ? { name: match.name, hex: match.hex } : { name: typed, hex: '#808080' };
+}
+function handleQColorTyping(){
+  renderQColorList();
+  updateColorSwatchState();
+  updateQuickAddPreview();
 }
 function refreshAllDropdownSources(){
   renderQBrandList();
@@ -2613,15 +2682,12 @@ function refreshAllDropdownSources(){
 }
 
 /* ---------- Manual quick add ---------- */
-function selectQState(state){
-  qState = state;
-  document.querySelectorAll('#q_stateGroup .radio-opt').forEach(el=>el.classList.toggle('sel', el.dataset.val===state));
-}
 function addManualEntry(){
   const brand = document.getElementById('q_brand').value.trim();
   const material = document.getElementById('q_material').value.trim();
   const color = resolveQColor();
-  const qty = Math.max(1, parseInt(document.getElementById('q_qty').value) || 1);
+  const boxQty = Math.max(0, parseInt(document.getElementById('q_boxQty').value) || 0);
+  const looseQty = Math.max(0, parseInt(document.getElementById('q_looseQty').value) || 0);
   const barcode = document.getElementById('q_barcode').value.trim();
   const threshold = Math.max(0, parseInt(document.getElementById('q_threshold').value) || 0);
   const disableLowStock = document.getElementById('q_disableLowStock').checked;
@@ -2633,35 +2699,41 @@ function addManualEntry(){
     toast('Brand, material, and color are required');
     return;
   }
+  if(boxQty === 0 && looseQty === 0){
+    toast('Enter at least one box or loose spool');
+    return;
+  }
 
   ensureListedOption('brands', brand);
   ensureListedOption('materials', material);
   ensureListedColor(color);
 
+  const qtyLabel = [boxQty ? boxQty + ' box' + (boxQty!==1?'es':'') : '', looseQty ? looseQty + ' loose' : ''].filter(Boolean).join(' + ');
   let sku = barcode ? findSkuByBarcode(barcode) : findSkuByAttributes(brand, material, color.name);
   captureUndo();
   if(sku){
-    if(qState==='box') sku.boxCount += qty; else sku.looseCount += qty;
+    sku.boxCount += boxQty;
+    sku.looseCount += looseQty;
     sku.updatedAt = Date.now();
-    logEvent(sku.id, 'manual_add', qty, 'manual');
-    addScanLogEntry(sku, skuLabel(sku), qty, 'Added stock', 'manual',
-      qState==='box' ? {boxCount:-qty} : {looseCount:-qty});
-    showUndoBar('+' + qty + ' to ' + skuLabel(sku));
+    logEvent(sku.id, 'manual_add', boxQty + looseQty, 'manual');
+    addScanLogEntry(sku, skuLabel(sku), boxQty + looseQty, 'Added stock', 'manual',
+      {boxCount:-boxQty, looseCount:-looseQty});
+    showUndoBar('+' + qtyLabel + ' to ' + skuLabel(sku));
   } else {
     const id = barcode || uid('manual');
     sku = {
       id, barcodes: barcode ? [barcode] : [], brand, material, colorName: color.name, colorHex: color.hex,
-      boxCount: qState==='box' ? qty : 0,
-      looseCount: qState==='loose' ? qty : 0,
+      boxCount: boxQty,
+      looseCount: looseQty,
       lowStockThreshold: threshold,
       lowStockDisabled: disableLowStock,
       weightPerBoxKg, purchaseUrl, location,
       createdAt: Date.now(), updatedAt: Date.now()
     };
     data.skus[id] = sku;
-    logEvent(id, 'sku_created', qty, barcode ? 'barcode' : 'manual');
-    addScanLogEntry(sku, skuLabel(sku), qty, 'Added filament', barcode ? 'barcode' : 'manual',
-      qState==='box' ? {boxCount:-qty} : {looseCount:-qty});
+    logEvent(id, 'sku_created', boxQty + looseQty, barcode ? 'barcode' : 'manual');
+    addScanLogEntry(sku, skuLabel(sku), boxQty + looseQty, 'Added filament', barcode ? 'barcode' : 'manual',
+      {boxCount:-boxQty, looseCount:-looseQty});
     showUndoBar('Added ' + skuLabel(sku));
   }
   saveData();
@@ -2670,7 +2742,8 @@ function addManualEntry(){
   document.getElementById('q_brand').value='';
   document.getElementById('q_material').value='';
   document.getElementById('q_barcode').value='';
-  document.getElementById('q_qty').value=1;
+  document.getElementById('q_boxQty').value=1;
+  document.getElementById('q_looseQty').value=0;
   document.getElementById('q_threshold').value = data.settings.defaultThreshold;
   document.getElementById('q_threshold').disabled = false;
   document.getElementById('q_disableLowStock').checked = false;
@@ -2680,12 +2753,11 @@ function addManualEntry(){
   document.getElementById('q_location').value = '';
   document.getElementById('q_customColorRow').classList.remove('show');
   qColorIsCustom = false;
-  qColorTouched = false;
-  qSelectedColor = { ...data.settings.colors[0] };
-  updateQColorDisplay();
+  document.getElementById('q_color').value = '';
+  renderQColorList();
+  updateColorSwatchState();
   renderQBrandList();
   renderQMaterialList();
-  selectQState('box');
   document.getElementById('q_brand').focus();
   updateQuickAddPreview();
 }
@@ -2755,6 +2827,7 @@ function openSkuModal(barcode){
   delete document.getElementById('f_purchaseUrl').dataset.autofilled;
   document.getElementById('f_purchaseUrl').value = '';
   document.getElementById('f_location').value = '';
+  document.getElementById('f_notes').value = '';
   setTimeout(()=>document.getElementById('f_brand').focus(), 50);
 }
 function handleNewBarcodeFieldsChanged(){
@@ -2777,6 +2850,7 @@ function saveSkuModal(){
   const weightPerBoxKg = Math.max(0, parseFloat(document.getElementById('f_weightPerBox').value)) || 1;
   const purchaseUrl = normalizeUrl(document.getElementById('f_purchaseUrl').value);
   const location = document.getElementById('f_location').value.trim();
+  const notes = document.getElementById('f_notes').value.trim();
   const barcode = document.getElementById('f_barcode').value.trim();
 
   if(!brand || !material || !color.name){ toast('Brand, material, and color are required'); return; }
@@ -2791,7 +2865,7 @@ function saveSkuModal(){
     looseCount: currentMode==='out' ? qty : 0,
     lowStockThreshold: threshold,
     lowStockDisabled: disableLowStock,
-    weightPerBoxKg, purchaseUrl, location,
+    weightPerBoxKg, purchaseUrl, location, notes,
     createdAt: Date.now(), updatedAt: Date.now()
   };
   data.skus[id] = sku;
@@ -2815,7 +2889,9 @@ async function editSku(id){
   document.getElementById('e_boxCount').value = sku.boxCount;
   document.getElementById('e_looseCount').value = sku.looseCount;
   document.getElementById('e_location').value = sku.location || '';
+  document.getElementById('e_notes').value = sku.notes || '';
   document.getElementById('e_threshold').value = sku.lowStockThreshold;
+  document.getElementById('e_targetStock').value = sku.targetStock || '';
   document.getElementById('e_disableLowStock').checked = !!sku.lowStockDisabled;
   document.getElementById('e_threshold').disabled = !!sku.lowStockDisabled;
   document.getElementById('e_weightPerBox').value = sku.weightPerBoxKg || 1;
@@ -2894,10 +2970,12 @@ function saveEditModal(){
   sku.colorHex = color.hex || sku.colorHex;
   ensureListedColor({ name: sku.colorName, hex: sku.colorHex });
   sku.lowStockThreshold = Math.max(0, parseInt(document.getElementById('e_threshold').value) || 0);
+  sku.targetStock = Math.max(0, parseInt(document.getElementById('e_targetStock').value) || 0);
   sku.lowStockDisabled = document.getElementById('e_disableLowStock').checked;
   sku.weightPerBoxKg = Math.max(0, parseFloat(document.getElementById('e_weightPerBox').value)) || 1;
   sku.purchaseUrl = normalizeUrl(document.getElementById('e_purchaseUrl').value);
   sku.location = document.getElementById('e_location').value.trim();
+  sku.notes = document.getElementById('e_notes').value.trim();
 
   const newBox = Math.max(0, parseInt(document.getElementById('e_boxCount').value) || 0);
   const newLoose = Math.max(0, parseInt(document.getElementById('e_looseCount').value) || 0);
@@ -2921,6 +2999,13 @@ function saveEditModal(){
 }
 
 /* ---------- Inventory row actions ---------- */
+function toggleFavorite(id){
+  const sku = data.skus[id]; if(!sku) return;
+  sku.favorite = !sku.favorite;
+  sku.updatedAt = Date.now();
+  saveData();
+  renderInventory();
+}
 function checkOutBox(id){
   const sku = data.skus[id]; if(!sku) return;
   if(sku.boxCount <= 0){ toast('No boxes on hand for ' + skuLabel(sku)); return; }
@@ -3071,6 +3156,7 @@ function mergeMaterials(){
       const dupe = group[i];
       keeper.boxCount += dupe.boxCount;
       keeper.looseCount += dupe.looseCount;
+      if(!keeper.targetStock && dupe.targetStock) keeper.targetStock = dupe.targetStock;
       keeper.barcodes = [...new Set([...(keeper.barcodes||[]), ...(dupe.barcodes||[])])];
       if(!keeper.purchaseUrl && dupe.purchaseUrl) keeper.purchaseUrl = dupe.purchaseUrl;
       data.events.forEach(ev => { if(ev.skuId === dupe.id) ev.skuId = keeper.id; });
@@ -3352,6 +3438,7 @@ function renderInventory(){
   const search = document.getElementById('searchInput').value.toLowerCase();
   const searchTerms = search.split(/\s+/).filter(Boolean);
   const lowOnly = document.getElementById('lowOnlyToggle').checked;
+  const favOnly = document.getElementById('favOnlyToggle').checked;
 
   let skus = Object.values(data.skus);
   skus = skus.filter(s=>{
@@ -3359,6 +3446,7 @@ function renderInventory(){
     if(searchTerms.length && !searchTerms.every(t=>text.includes(t))) return false;
     if(currentMaterialFilterFamily && materialFamily(s.material) !== currentMaterialFilterFamily) return false;
     if(lowOnly && !isLowStock(s)) return false;
+    if(favOnly && !s.favorite) return false;
     return true;
   });
   skus = sortSkusForDisplay(skus);
@@ -3384,17 +3472,19 @@ function renderInventory(){
       <td class="row-select-cell"><input type="checkbox" class="row-select-checkbox" data-id="${escapeHtml(sku.id)}" ${checked} onchange="toggleRowSelect('${jsStr(sku.id)}', this.checked)"></td>
       <td>
         <div class="filament-cell">
+          <button class="fav-star ${sku.favorite ? 'on' : ''}" onclick="toggleFavorite('${jsStr(sku.id)}')" title="${sku.favorite ? 'Unfavorite' : 'Favorite'}">${sku.favorite ? '&#9733;' : '&#9734;'}</button>
           <span class="swatch" style="background:${safeHex(sku.colorHex||'#999')}"></span>
           <div>
             <span class="prod-name">${escapeHtml(sku.brand)} ${escapeHtml(sku.material)} — ${escapeHtml(sku.colorName)}</span>
             ${sku.ordered ? '<span class="order-badge">ORDERED</span>' : (isEmpty ? '<span class="empty-badge">OUT OF STOCK</span>' : (isLow ? '<span class="low-badge">LOW</span>' : ''))}
             ${sku.lowStockDisabled ? '<span class="low-badge" style="color:var(--text-muted);border-color:var(--border);">NO WARNING</span>' : ''}
             ${(sku.location || (sku.barcodes && sku.barcodes.length)) ? `<span class="prod-meta-line">${sku.location ? escapeHtml(sku.location) : ''}${(sku.location && sku.barcodes && sku.barcodes.length) ? ' - ' : ''}${(sku.barcodes && sku.barcodes.length) ? `<span class="prod-barcode-inline">${escapeHtml(sku.barcodes[0])}${sku.barcodes.length>1 ? ' +'+(sku.barcodes.length-1)+' more' : ''}</span>` : ''}</span>` : ''}
+            ${sku.notes ? `<span class="prod-meta-line prod-notes" title="${escapeHtml(sku.notes)}">&#128221; ${escapeHtml(sku.notes)}</span>` : ''}
           </div>
         </div>
       </td>
       <td><div class="count-cell"><span class="count-num">${sku.boxCount}</span><button class="checkout-btn" onclick="checkOutBox('${jsStr(sku.id)}')" title="Open a box for use">Open Box</button>${sku.looseCount>0 ? `<span class="loose-tag" onclick="editSkuLoose('${jsStr(sku.id)}')" title="Loose stock on hand — click to adjust">+${sku.looseCount} loose</span>` : ''}</div></td>
-      <td><div class="row-actions">${(()=>{ const u = effectivePurchaseUrl(sku); return isSafeHttpUrl(u) ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${isAmazonSearchFallback(u) ? 'Amazon' : 'Buy'}</a>` : ''; })()}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
+      <td><div class="row-actions">${(()=>{ const u = effectivePurchaseUrl(sku); return isSafeHttpUrl(u) ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${isSearchFallback(u) ? 'Search' : 'Buy'}</a>` : ''; })()}<button class="icon-btn" onclick="editSku('${jsStr(sku.id)}')">Edit</button><button class="icon-btn" onclick="deleteSku('${jsStr(sku.id)}')">Remove</button></div></td>
     </tr>`);
   });
   body.innerHTML = rows.join('');
@@ -3491,7 +3581,7 @@ function renderQuickCheck(){
   el.innerHTML = `
     <div class="qc-label">Quick Check</div>
     <div class="qc-name" title="${escapeHtml(skuLabel(sku))}">${escapeHtml(skuLabel(sku))}</div>
-    <div class="qc-expected">Expected: ${sku.boxCount} sealed box${sku.boxCount!==1?'es':''}</div>
+    <div class="qc-expected">Expected: ${sku.boxCount} sealed box${sku.boxCount!==1?'es':''}, ${sku.looseCount||0} loose spool${(sku.looseCount||0)!==1?'s':''}</div>
     <div class="qc-actions">
       <button class="qc-btn yes" onclick="quickCheckYes('${jsStr(sku.id)}')">&#10003; Yes</button>
       <button class="qc-btn no" onclick="quickCheckNo('${jsStr(sku.id)}')">&#10007; No</button>
@@ -3524,6 +3614,13 @@ function setMostUsedRange(days){
   renderMostUsed();
 }
 function boxKg(sku){ return sku.weightPerBoxKg || 1; }
+// Reorder-up-to quantity: user-set target stock (boxes) minus what's on hand
+// now. Nothing automatic here — set in the Edit modal, next to the low
+// stock threshold, since it's the same kind of judgment call.
+function recommendedReorderQty(sku){
+  if(!sku.targetStock) return 0;
+  return Math.max(0, sku.targetStock - (sku.boxCount||0));
+}
 function drawPie(chartId, legendId, segments, unit){
   const chart = document.getElementById(chartId);
   const legend = document.getElementById(legendId);
@@ -3704,15 +3801,17 @@ function renderReport(){
   const reorderHtml = reorderRows.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead><tr style="border-bottom:2px solid var(--border);text-align:left;">
-          <th style="padding:6px 4px;">Filament</th><th style="padding:6px 4px;text-align:right;">On hand</th><th style="padding:6px 4px;text-align:right;">Runway</th>
+          <th style="padding:6px 4px;">Filament</th><th style="padding:6px 4px;text-align:right;">On hand</th><th style="padding:6px 4px;text-align:right;">Runway</th><th style="padding:6px 4px;text-align:right;">Reorder qty</th>
         </tr></thead>
         <tbody>${reorderRows.map(r=>{
           const weeksText = r.weeksLeft === null ? '—' : (r.weeksLeft < 10 ? r.weeksLeft.toFixed(1) : Math.round(r.weeksLeft)) + ' wks';
+          const reorderQty = recommendedReorderQty(r.sku);
           return `
           <tr style="border-bottom:1px solid var(--border);">
             <td style="padding:6px 4px;">${escapeHtml(skuLabel(r.sku))}</td>
             <td style="padding:6px 4px;text-align:right;">${r.sku.boxCount} box / ${r.sku.looseCount} loose</td>
             <td style="padding:6px 4px;text-align:right;font-weight:700;">${weeksText}</td>
+            <td style="padding:6px 4px;text-align:right;font-weight:700;">${reorderQty > 0 ? reorderQty : '—'}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -3951,9 +4050,10 @@ function renderReorderReport(){
     const sku = r.sku;
     const weeksText = r.weeksLeft === null ? '—' : (r.weeksLeft < 10 ? r.weeksLeft.toFixed(1) : Math.round(r.weeksLeft)) + ' wks';
     const kgInStock = (sku.boxCount * boxKg(sku)).toFixed(1);
+    const reorderQty = recommendedReorderQty(sku);
     const effUrl = effectivePurchaseUrl(sku);
     const buyLink = isSafeHttpUrl(effUrl)
-      ? `<a class="icon-btn" href="${escapeHtml(effUrl)}" target="_blank" rel="noopener noreferrer">${isAmazonSearchFallback(effUrl) ? 'Amazon' : 'Buy'} &rarr;</a>`
+      ? `<a class="icon-btn" href="${escapeHtml(effUrl)}" target="_blank" rel="noopener noreferrer">${isSearchFallback(effUrl) ? 'Search' : 'Buy'} &rarr;</a>`
       : '<span class="footer-note" style="margin:0;">No link</span>';
     const statusHtml = sku.ordered
       ? `<button class="order-btn undo-order" onclick="unmarkSkuOrdered('${jsStr(sku.id)}')" title="Click if this wasn't actually ordered, or was ordered by mistake">Ordered &mdash; undo</button>`
@@ -3961,26 +4061,20 @@ function renderReorderReport(){
     return `
     <div class="log-row${sku.ordered ? ' on-order-row' : ''}">
       <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(skuLabel(sku))}</div>
-      <div style="width:120px;text-align:right;">${sku.boxCount} box / ${sku.looseCount} loose</div>
-      <div style="width:70px;text-align:right;color:var(--text-muted);">${kgInStock} kg</div>
-      <div style="width:70px;text-align:right;font-weight:700;">${weeksText}</div>
-      <div style="width:105px;text-align:right;">${buyLink}</div>
-      <div style="width:150px;text-align:right;">${statusHtml}</div>
+      <div style="width:100px;text-align:right;">${sku.boxCount} box / ${sku.looseCount} loose</div>
+      <div style="width:65px;text-align:right;color:var(--text-muted);">${kgInStock} kg</div>
+      <div style="width:65px;text-align:right;font-weight:700;">${weeksText}</div>
+      <div style="width:90px;text-align:right;font-weight:700;" title="${sku.targetStock ? 'Target stock (' + sku.targetStock + ' boxes) minus what\'s on hand now' : 'Set a target stock in Edit to get a reorder suggestion'}">${reorderQty > 0 ? reorderQty : '—'}</div>
+      <div style="width:90px;text-align:right;">${buyLink}</div>
+      <div style="width:140px;text-align:right;">${statusHtml}</div>
     </div>`;
   }).join('');
 }
 function copyReorderReport(){
   const rows = computeReorderRows();
   if(!rows.length){ toast('Nothing needs reordering right now'); return; }
-  const lines = rows.map(r=>{
-    const sku = r.sku;
-    const weeksText = r.weeksLeft === null ? 'runway unknown' : (r.weeksLeft < 10 ? r.weeksLeft.toFixed(1) : Math.round(r.weeksLeft)) + ' wks left';
-    const kg = (sku.boxCount * boxKg(sku)).toFixed(1);
-    const link = effectivePurchaseUrl(sku) || 'no link';
-    const orderedTag = sku.ordered ? ' — already ordered' : '';
-    return `${skuLabel(sku)} — ${sku.boxCount} box / ${sku.looseCount} loose (${kg} kg) — ${weeksText} — ${link}${orderedTag}`;
-  });
-  const text = 'Reorder report — ' + new Date().toLocaleDateString() + '\n\n' + lines.join('\n');
+  const lines = rows.map(r=>`${skuLabel(r.sku)} — ${effectivePurchaseUrl(r.sku) || 'no link'}`);
+  const text = lines.join('\n');
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard')).catch(()=>toast('Could not copy — try again'));
   } else {
@@ -4700,12 +4794,12 @@ function importData(event){
   event.target.value = '';
 }
 function clearAllData(){
-  if(confirm("This clears every filament and every scan in the shared data (it syncs to GitHub for everyone). This can't be undone. Continue?")){
-    data = { skus:{}, events:[], settings:{} };
-    ensureSettingsDefaults(data);
-    saveData(); renderAll(); refreshAllDropdownSources();
-    toast('All data cleared');
-  }
+  const typed = prompt("This clears every filament and every scan in the shared data (it syncs to GitHub for everyone). This can't be undone.\n\nType DELETE to confirm:");
+  if(typed !== 'DELETE') return;
+  data = { skus:{}, events:[], settings:{} };
+  ensureSettingsDefaults(data);
+  saveData(); renderAll(); refreshAllDropdownSources();
+  toast('All data cleared');
 }
 function resetAllLooseCounts(){
   const skus = Object.values(data.skus).filter(s=>s.looseCount>0);
@@ -4782,9 +4876,13 @@ function renderFeedbackList(){
 }
 
 /* ---------- Init ---------- */
+document.addEventListener('dblclick', (e)=>{
+  if(e.target.tagName === 'INPUT' && e.target.type === 'number') e.target.value = '';
+});
 document.getElementById('q_brand').addEventListener('input', ()=>{ renderQBrandList(); updateQuickAddPreview(); });
 document.getElementById('q_material').addEventListener('input', ()=>{ renderQMaterialList(); updateQuickAddPreview(); });
-document.getElementById('q_colorNameCustom').addEventListener('input', ()=>{ qColorTouched = true; updateQuickAddPreview(); });
+document.getElementById('q_colorNameCustom').addEventListener('input', ()=>{ updateColorSwatchState(); updateQuickAddPreview(); });
+document.getElementById('q_colorHexCustom').addEventListener('input', updateColorSwatchState);
 initApp();
 </script>
 </body>

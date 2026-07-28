@@ -656,7 +656,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.20</div>
+    <div class="sub">V0.21</div>
   </div>
 </header>
 
@@ -1228,6 +1228,10 @@
     <div class="modal-sub" id="plog_sub"></div>
     <div class="field" id="plog_categoryField"><label>Category</label><select id="plog_category"></select></div>
     <div class="field"><label>Note</label><input type="text" id="plog_note" placeholder="Optional note..." onkeydown="if(event.key==='Enter')savePrinterLogModal();"></div>
+    <div class="field" id="plog_fixField" style="display:none;margin-top:10px;">
+      <label>What worked <span style="font-weight:400;">(optional)</span></label>
+      <textarea id="plog_fix" class="notes-input" rows="2" placeholder="e.g. Reseated the extruder gear and cleared filament dust"></textarea>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closePrinterLogModal()">Cancel</button>
       <button class="btn primary" onclick="savePrinterLogModal()">Save</button>
@@ -2427,6 +2431,11 @@ function undoScanLogEntry(logId){
 }
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function truncateWords(text, wordCount){
+  const words = (text||'').trim().split(/\s+/).filter(Boolean);
+  if(words.length <= wordCount) return text || '';
+  return words.slice(0, wordCount).join(' ') + '…';
 }
 // For values embedded inside a JS string within an inline on* attribute:
 // escape for the JS string first, then for the HTML attribute around it.
@@ -3863,7 +3872,7 @@ function renderReport(){
         <div class="log-row">
           <div class="log-time">${dt.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div>
           <div class="log-action">${p ? escapeHtml(p.name) : '(removed)'}</div>
-          <div class="log-item">${escapeHtml(iss.text)}</div>
+          <div class="log-item" title="${escapeHtml(iss.text)}">${escapeHtml(truncateWords(iss.text, 6))}</div>
         </div>`;
       }).join('')
     : '<div class="empty-state">No open issues.</div>';
@@ -4368,7 +4377,7 @@ async function openPrinterLogModal(printerId, type){
   await preEditRefresh();
   const p = data.printers[printerId];
   if(!p){ toast('That printer is no longer in the shared data'); return; }
-  plogContext = { printerId, type };
+  plogContext = { printerId, type, editId: null };
   const titles = { service:'Log service', issue:'Report issue', note:'Add note' };
   document.getElementById('plog_title').textContent = titles[type] || 'Log entry';
   document.getElementById('plog_sub').textContent = p.name;
@@ -4383,6 +4392,42 @@ async function openPrinterLogModal(printerId, type){
   } else {
     categoryField.style.display = 'none';
   }
+  // Fix notes only make sense once an issue actually exists to fix — never shown when creating a new entry.
+  document.getElementById('plog_fixField').style.display = 'none';
+  document.getElementById('plog_fix').value = '';
+  document.getElementById('printerLogOverlay').classList.add('open');
+  setTimeout(()=>noteInput.focus(), 50);
+}
+async function openEditPrinterLogModal(logId){
+  await preEditRefresh();
+  const entry = data.printerLog.find(l=>l.id===logId);
+  if(!entry){ toast('That log entry is no longer in the shared data'); return; }
+  const p = data.printers[entry.printerId];
+  if(!p){ toast('That printer is no longer in the shared data'); return; }
+  plogContext = { printerId: entry.printerId, type: entry.type, editId: entry.id };
+  const titles = { service:'Edit service log', issue:'Edit issue', note:'Edit note' };
+  document.getElementById('plog_title').textContent = titles[entry.type] || 'Edit log entry';
+  document.getElementById('plog_sub').textContent = p.name;
+  const noteInput = document.getElementById('plog_note');
+  noteInput.value = entry.text || '';
+  noteInput.placeholder = entry.type === 'issue' ? "What went wrong (e.g. Jam in Right AMS)" : 'Optional note...';
+  const categoryField = document.getElementById('plog_categoryField');
+  if(entry.type === 'issue' || entry.type === 'note'){
+    categoryField.style.display = '';
+    const sel = document.getElementById('plog_category');
+    sel.innerHTML = data.settings.issueCategories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    sel.value = entry.category || '';
+  } else {
+    categoryField.style.display = 'none';
+  }
+  const fixField = document.getElementById('plog_fixField');
+  if(entry.type === 'issue'){
+    fixField.style.display = '';
+    document.getElementById('plog_fix').value = entry.fixText || '';
+  } else {
+    fixField.style.display = 'none';
+    document.getElementById('plog_fix').value = '';
+  }
   document.getElementById('printerLogOverlay').classList.add('open');
   setTimeout(()=>noteInput.focus(), 50);
 }
@@ -4392,22 +4437,30 @@ function closePrinterLogModal(){
 }
 function savePrinterLogModal(){
   if(!plogContext) return;
-  const { printerId, type } = plogContext;
+  const { printerId, type, editId } = plogContext;
   const p = data.printers[printerId];
   if(!p) return;
   const note = document.getElementById('plog_note').value.trim();
   const category = document.getElementById('plog_category').value;
+  const fixText = document.getElementById('plog_fix').value.trim();
   if((type === 'issue' || type === 'note') && !note){
     toast(type === 'issue' ? 'Add a note describing the issue' : 'Note is empty');
     return;
   }
-  if(type === 'service'){
+  if(editId){
+    const entry = data.printerLog.find(l=>l.id===editId);
+    if(!entry){ toast('That log entry is no longer in the shared data'); closePrinterLogModal(); return; }
+    entry.text = note;
+    if(type === 'issue' || type === 'note') entry.category = category;
+    if(type === 'issue') entry.fixText = fixText;
+    toast('Log entry updated');
+  } else if(type === 'service'){
     p.lastServicedAt = Date.now();
     p.updatedAt = Date.now();
     data.printerLog.push({ id: uid('plog'), printerId, type:'service', text:note, timestamp:Date.now(), resolved:null, resolvedAt:null });
     toast('Logged service for ' + p.name);
   } else if(type === 'issue'){
-    data.printerLog.push({ id: uid('plog'), printerId, type:'issue', text:note, category, timestamp:Date.now(), resolved:false, resolvedAt:null });
+    data.printerLog.push({ id: uid('plog'), printerId, type:'issue', text:note, category, fixText:'', timestamp:Date.now(), resolved:false, resolvedAt:null });
     p.status = 'down';
     p.updatedAt = Date.now();
     toast('Issue logged for ' + p.name);
@@ -4612,7 +4665,7 @@ function renderMasterPrinterLog(){
     entries = entries.filter(e=>{
       const p = data.printers[e.printerId];
       const name = p ? p.name.toLowerCase() : '';
-      return name.includes(term) || (e.text||'').toLowerCase().includes(term);
+      return name.includes(term) || (e.text||'').toLowerCase().includes(term) || (e.fixText||'').toLowerCase().includes(term);
     });
   }
   if(printerLogPrinterFilter){
@@ -4653,12 +4706,16 @@ function renderMasterPrinterLog(){
     const resolveBtn = (e.type === 'issue' && !e.resolved)
       ? `<button class="icon-btn" style="margin-left:8px;" onclick="resolvePrinterIssue('${jsStr(e.id)}')">Mark resolved</button>`
       : '';
+    const fixLine = (e.type === 'issue' && e.fixText)
+      ? `<div class="prod-meta-line" style="margin-left:0;margin-top:3px;">&#10003; What worked: ${escapeHtml(e.fixText)}</div>`
+      : '';
     return `
     <div class="log-row">
       <div class="log-time">${timeStr}</div>
       <div class="log-action">${p ? escapeHtml(p.name) : '(removed)'}</div>
-      <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: ${escapeHtml(e.text || '—')}</div>
+      <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: ${escapeHtml(e.text || '—')}${fixLine}</div>
       ${resolveBtn}
+      <button class="icon-btn" style="margin-left:8px;" onclick="openEditPrinterLogModal('${jsStr(e.id)}')">Edit</button>
       <button class="icon-btn" style="margin-left:8px;" onclick="deletePrinterLogEntry('${jsStr(e.id)}')">Delete</button>
     </div>`;
   }).join('');

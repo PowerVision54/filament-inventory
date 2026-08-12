@@ -124,6 +124,25 @@
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
 
+  /* Sub-tab band: sits directly under the main tabs in the brand tint so it
+     reads as belonging to whichever main tab is active above it. */
+  .subnav{
+    background:var(--brand-tint);
+    border-bottom:1px solid var(--border);
+  }
+  .subnav-inner{
+    max-width:1100px;margin:0 auto;
+    display:flex;gap:6px;padding:7px 20px;flex-wrap:wrap;
+  }
+  .subnav-btn{
+    border:1px solid transparent;background:none;
+    padding:5px 13px;border-radius:999px;
+    font-size:12px;font-weight:700;color:var(--brand);
+    letter-spacing:0.01em;
+  }
+  .subnav-btn:hover{background:rgba(17,71,53,0.08);}
+  .subnav-btn.active{background:var(--brand);color:#fff;}
+
   main{max-width:1100px;margin:0 auto;padding:16px 20px;}
 
   section{
@@ -656,19 +675,18 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.21</div>
+    <div class="sub">V0.22</div>
   </div>
 </header>
 
 <nav class="tabs">
   <div class="tabs-inner">
-    <button class="tab-btn active" data-tab="inventory" onclick="switchTab('inventory')">Inventory</button>
-    <button class="tab-btn" data-tab="addfilament" onclick="switchTab('addfilament')">Stock In/Out</button>
-    <button class="tab-btn" data-tab="maintenance" onclick="switchTab('maintenance')">3D Printers</button>
-    <button class="tab-btn" data-tab="reports" onclick="switchTab('reports')">Reports</button>
-    <button class="tab-btn" data-tab="reorder" onclick="switchTab('reorder')">Reorder</button>
-    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+    <button class="tab-btn active" data-main="filament" onclick="switchMainTab('filament')">Filament</button>
+    <button class="tab-btn" data-main="printers" onclick="switchMainTab('printers')">3D Printers</button>
+    <button class="tab-btn" data-main="reports" onclick="switchMainTab('reports')">Reports</button>
+    <button class="tab-btn" data-main="settings" onclick="switchMainTab('settings')">Settings</button>
   </div>
+  <div class="subnav" id="subnav" style="display:none;"><div class="subnav-inner" id="subnavInner"></div></div>
 </nav>
 
 <main>
@@ -864,6 +882,17 @@
         <div class="empty-state" id="orderStatsEmpty" style="display:none;">No completed orders tracked yet — mark something ordered in the Reorder tab to start building this up.</div>
       </section>
       <section>
+        <h2>Spare parts</h2>
+        <p class="footer-note" style="margin-top:0;margin-bottom:10px;">What's running low on the 3D Printers &rarr; Parts list. "Reorder" is each part's target stock minus what's on hand — manage thresholds and targets from the part's Edit form.</p>
+        <div class="stat-strip">
+          <div class="stat-item"><div class="num" id="repPartsTotal">0</div><div class="label">Parts tracked</div></div>
+          <div class="stat-item low"><div class="num" id="repPartsLow">0</div><div class="label">Low stock</div></div>
+          <div class="stat-item"><div class="num" id="repPartsOnOrder">0</div><div class="label">On order</div></div>
+        </div>
+        <div id="repPartsReorderList" style="margin-top:10px;"></div>
+        <div class="empty-state" id="repPartsReorderEmpty" style="display:none;">No spare parts need reordering right now.</div>
+      </section>
+      <section>
         <div class="section-header-row">
           <h2>Printer maintenance</h2>
           <div class="subtabs" style="margin-bottom:0;">
@@ -981,6 +1010,87 @@
     </section>
   </div>
 
+  <div class="tab-panel" data-tab="parts">
+
+    <section>
+      <h2>Overview</h2>
+      <div class="stat-strip">
+        <div class="stat-item"><div class="num" id="statParts">0</div><div class="label">Parts tracked</div></div>
+        <div class="stat-item"><div class="num" id="statPartsQty">0</div><div class="label">Units in stock</div></div>
+        <div class="stat-item low"><div class="num" id="statPartsLow">0</div><div class="label">Low stock</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-header-row" style="margin-bottom:14px;">
+        <h2 style="margin-bottom:0;">Spare Parts</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="icon-btn" onclick="openPartsImportModal()">Import CSV</button>
+          <button class="btn primary" onclick="openPartModal(null)">Add part</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="search-wrap">
+          <input type="text" id="partsSearchInput" placeholder="Search name, MPN, model, barcode..." oninput="renderParts(); document.getElementById('partsSearchClearBtn').style.display = this.value ? 'block' : 'none';">
+          <button class="search-clear-btn" id="partsSearchClearBtn" onclick="clearPartsSearch()" style="display:none;" title="Clear search">&times;</button>
+        </div>
+        <div class="hover-dd" style="min-width:170px;">
+          <div class="hover-dd-display" id="partCategoryFilterDisplay">All categories</div>
+          <div class="hover-dd-list" id="partCategoryFilterList"></div>
+        </div>
+        <label class="toggle-chip"><input type="checkbox" id="partsLowOnlyToggle" onchange="renderParts()"> Low stock only</label>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Part</th><th style="width:150px;">Qty</th><th></th></tr>
+        </thead>
+        <tbody id="partsBody"></tbody>
+      </table>
+      <div class="empty-state" id="partsEmptyState" style="display:none;">No spare parts tracked yet. Use "Add part", the Stock In/Out sub tab, or "Import CSV" to get started.</div>
+    </section>
+
+  </div>
+
+  <div class="tab-panel" data-tab="partsstock">
+    <section>
+      <h2>Parts stock in/out</h2>
+      <div class="mode-row">
+        <button class="mode-btn in" id="partsModeInBtn" onclick="setPartsMode('in')">Scan in — part received</button>
+        <button class="mode-btn out active" id="partsModeOutBtn" onclick="setPartsMode('out')">Scan out — part used</button>
+      </div>
+      <input type="text" id="partsBarcodeInput" placeholder="Scan a barcode, then Enter" autocomplete="off" inputmode="numeric">
+      <p class="scan-hint" id="partsModeHint">Scanning a known barcode removes one unit from that part's stock.</p>
+      <p class="footer-note" style="margin-bottom:0;">Scans here only touch spare parts — filament barcodes have their own scanner under the Filament tab.</p>
+    </section>
+
+    <section>
+      <h2>Recent part scans</h2>
+      <div id="partsScanLogList"></div>
+      <div class="empty-state" id="partsScanLogEmpty" style="display:none;">Nothing scanned or added yet.</div>
+      <p class="footer-note" style="margin-bottom:0;">Keeps the last 20 — undo any one if it was scanned in error.</p>
+    </section>
+  </div>
+
+  <div class="tab-panel" data-tab="partsreorder">
+    <section>
+      <div class="section-header-row">
+        <h2>Parts reorder report</h2>
+        <button class="btn" onclick="copyPartsReorderReport()">Copy as text</button>
+      </div>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Every spare part currently at or below its low stock threshold, lowest on hand first. "Reorder qty" is the target stock you set in Edit minus what's on hand now. Mark something ordered to highlight it yellow here and in the Parts list — it clears itself automatically once stock is back above threshold.</p>
+      <div class="log-row" style="border-bottom:2px solid var(--border);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:700;">
+        <div style="flex:2;">Part</div>
+        <div style="width:110px;text-align:right;">MPN</div>
+        <div style="width:80px;text-align:right;">On hand</div>
+        <div style="width:90px;text-align:right;">Reorder qty</div>
+        <div style="width:90px;text-align:right;">Buy</div>
+        <div style="width:140px;text-align:right;">Status</div>
+      </div>
+      <div id="partsReorderList"></div>
+      <div class="empty-state" id="partsReorderEmpty" style="display:none;">No spare parts need reordering right now.</div>
+    </section>
+  </div>
+
   <div class="tab-panel" data-tab="settings">
     <section>
       <h2>GitHub Sync</h2>
@@ -1004,6 +1114,7 @@
       <div class="footer-row">
         <button class="btn" onclick="exportStockCSV()">Export stock (CSV)</button>
         <button class="btn" onclick="exportEventsCSV()">Export activity log (CSV)</button>
+        <button class="btn" onclick="exportPartsCSV()">Export spare parts (CSV)</button>
       </div>
     </section>
     <section>
@@ -1128,6 +1239,65 @@
   </div>
 </div>
 
+<div class="overlay" id="partOverlay">
+  <div class="modal wide">
+    <h3 id="partModalTitle">Add spare part</h3>
+    <div class="modal-sub" id="partModalSub">Track a spare part with low stock warnings, just like filament.</div>
+    <div class="field-row">
+      <div class="field"><label>Item name</label><input type="text" id="p_name" placeholder="Hotend assembly, 0.4mm"></div>
+      <div class="field"><label>MPN <span style="font-weight:400;">(Bambu part number, optional)</span></label><input type="text" id="p_mpn" placeholder="e.g. FAH008"></div>
+    </div>
+    <div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>Category</label><input type="text" id="p_category" list="partCategoryList" placeholder="Hotend"></div>
+      <div class="field"><label>Compatible models <span style="font-weight:400;">(optional)</span></label><input type="text" id="p_models" placeholder="X1C, P1S"></div>
+    </div>
+    <div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>Quantity on hand</label><input type="number" id="p_qty" value="1" min="0"></div>
+      <div class="field"><label>Location <span style="font-weight:400;">(optional)</span></label><input type="text" id="p_location" placeholder="e.g. Shelf 4, Bin C"></div>
+    </div>
+    <div class="field-row" style="margin-top:10px;">
+      <div class="field"><label>Low stock threshold</label><input type="number" id="p_threshold" value="1" min="0"></div>
+      <div class="field"><label>Target stock <span style="font-weight:400;">(optional)</span></label><input type="number" id="p_targetStock" min="0" placeholder="e.g. 3"></div>
+    </div>
+    <label class="toggle-chip" style="margin-top:8px;">
+      <input type="checkbox" id="p_disableLowStock" onchange="document.getElementById('p_threshold').disabled=this.checked"> Rarely needed — don't warn on low stock
+    </label>
+    <div class="field" style="margin-top:10px;"><label>Where to buy <span style="font-weight:400;">(optional)</span></label><input type="text" id="p_purchaseUrl" placeholder="https://..."></div>
+    <div class="field" style="margin-top:10px;"><label>Description <span style="font-weight:400;">(optional)</span></label><textarea id="p_description" class="notes-input" rows="2" placeholder="What this part is / what it fixes"></textarea></div>
+    <div class="field" style="margin-top:10px;"><label>Source / notes <span style="font-weight:400;">(optional)</span></label><textarea id="p_notes" class="notes-input" rows="2" placeholder="Came with printer, bought from Bambu store, etc."></textarea></div>
+    <div class="field" style="margin-top:10px;">
+      <label>Barcodes</label>
+      <div class="settings-add-row">
+        <input type="text" id="p_newBarcode" placeholder="Scan or type a barcode" autocomplete="off">
+        <button class="btn primary" onclick="addBarcodeToEditingPart()">Add</button>
+      </div>
+      <div class="settings-list" id="p_barcodeList" style="margin-top:8px;"></div>
+      <p class="footer-note" style="margin-bottom:0;">Any barcode listed here will match this part when scanning on the parts Stock In/Out tab.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePartModal()">Cancel</button>
+      <button class="btn primary" onclick="savePartModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="partsImportOverlay">
+  <div class="modal wide">
+    <h3>Import spare parts from CSV</h3>
+    <div class="modal-sub">Paste CSV text below, or pick a .csv file. Expected columns, in order:<br><span class="mono" style="font-size:11px;">Barcode, Qty, Item Name, MPN, Category, Compatible Models, Description, Source/Notes</span><br>A header row is detected and skipped automatically. Rows whose barcode (or name + MPN) match an existing part update that part's quantity and fill in blanks; everything else is added as new.</div>
+    <div class="field"><label>CSV text</label><textarea id="partsImportText" class="notes-input" rows="10" placeholder="Barcode,Qty,Item Name,MPN,Category,Compatible Models,Description,Source/Notes&#10;0123456789,2,Hotend assembly 0.4mm,FAH008,Hotend,X1C P1S,Complete hotend,Bambu store"></textarea></div>
+    <div class="footer-row" style="margin-top:10px;">
+      <button class="btn" onclick="document.getElementById('partsImportFile').click()">Choose CSV file...</button>
+      <input type="file" id="partsImportFile" accept=".csv,text/csv" style="display:none" onchange="handlePartsImportFile(event)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closePartsImportModal()">Cancel</button>
+      <button class="btn primary" onclick="runPartsImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="partCategoryList"></datalist>
 <datalist id="brandList"></datalist>
 <datalist id="materialList"></datalist>
 
@@ -1496,6 +1666,12 @@ function daysSinceServicedForReport(ts){
   return days + (days === 1 ? ' day' : ' days');
 }
 
+const DEFAULT_PART_CATEGORIES = ['Hotend','Nozzle','Extruder','Belts & Motion','Electronics','Build Plate','AMS','Fans','Sensors','Tools','Other'];
+function partLabel(p){ return p.name + (p.mpn ? ' (' + p.mpn + ')' : ''); }
+function isLowPart(p){ return !p.lowStockDisabled && p.qty <= p.lowStockThreshold; }
+function findPartByBarcode(code){
+  return Object.values(data.parts).find(p => (p.barcodes || []).includes(code));
+}
 let data = null;
 
 function ensureSettingsDefaults(d){
@@ -1516,6 +1692,23 @@ function ensureSettingsDefaults(d){
   if(!d.printerLog) d.printerLog = [];
   if(!d.feedback) d.feedback = [];
   if(!d.orderLog) d.orderLog = [];
+  if(!d.parts) d.parts = {};
+  if(!d.partsScanLog) d.partsScanLog = [];
+  if(!d.settings.partCategories) d.settings.partCategories = DEFAULT_PART_CATEGORIES.slice();
+  d.settings.partCategories.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+  Object.values(d.parts).forEach(p=>{
+    if(!p.barcodes) p.barcodes = [];
+    if(p.qty === undefined) p.qty = 0;
+    if(p.mpn === undefined) p.mpn = '';
+    if(p.category === undefined || p.category === '') p.category = 'Other';
+    if(p.models === undefined) p.models = '';
+    if(p.description === undefined) p.description = '';
+    if(p.notes === undefined) p.notes = '';
+    if(p.location === undefined) p.location = '';
+    if(p.purchaseUrl === undefined) p.purchaseUrl = '';
+    if(p.lowStockThreshold === undefined) p.lowStockThreshold = 1;
+    if(p.targetStock === undefined) p.targetStock = Math.max(1, (p.lowStockThreshold||0) * 2);
+  });
   Object.values(d.skus).forEach(sku=>{
     if(!sku.barcodes){
       sku.barcodes = sku.barcode ? [sku.barcode] : [];
@@ -1897,6 +2090,7 @@ function mergeData(base, local, remote){
   merged.printerLog = mergeLogArrays(b.printerLog, local.printerLog, merged.printerLog, 'resolved');
   merged.feedback = mergeLogArrays(b.feedback, local.feedback, merged.feedback);
   merged.orderLog = mergeLogArrays(b.orderLog, local.orderLog, merged.orderLog, 'settled');
+  merged.partsScanLog = mergeLogArrays(b.partsScanLog, local.partsScanLog, merged.partsScanLog, 'undone').slice(-20);
 
   // Sku deletions: whichever side deleted a record wins — a plain edit
   // (checkout, scan, count/field adjustment) never changes createdAt, so a
@@ -1944,6 +2138,45 @@ function mergeData(base, local, remote){
     rs.barcodes = [...new Set([...(rs.barcodes||[]), ...(ls.barcodes||[])])];
   });
 
+  // Spare parts merge mirrors the sku merge above: deletions win over stale
+  // edits, quantities merge as deltas against the base so two people scanning
+  // at once both count, and newest-edit wins on descriptive fields.
+  const bParts = b.parts || {};
+  const localParts = local.parts || {};
+  const samePartRecord = (a, c) => a && c && a.createdAt === c.createdAt;
+  Object.keys(merged.parts).forEach(id=>{
+    if(bParts[id] && !localParts[id] && samePartRecord(bParts[id], merged.parts[id])){
+      if(merged.parts[id].updatedAt > bParts[id].updatedAt){
+        noteDroppedEdit(partLabel(merged.parts[id]));
+      }
+      delete merged.parts[id];
+    }
+  });
+  Object.values(localParts).forEach(lp=>{
+    const rp = merged.parts[lp.id];
+    const bp = bParts[lp.id];
+    if(!rp){
+      if(!bp || !samePartRecord(bp, lp)){
+        merged.parts[lp.id] = lp;
+      } else if(lp.updatedAt > bp.updatedAt){
+        noteDroppedEdit(partLabel(bp));
+      }
+      return;
+    }
+    if(bp){
+      rp.qty = Math.max(0, (rp.qty||0) + ((lp.qty||0) - (bp.qty||0)));
+    } else if((lp.updatedAt||0) > (rp.updatedAt||0)){
+      rp.qty = lp.qty;
+    }
+    if((lp.updatedAt||0) > (rp.updatedAt||0)){
+      ['name','mpn','category','models','description','notes','location','purchaseUrl','lowStockThreshold','lowStockDisabled','targetStock','ordered','orderedAt','lowSince'].forEach(k=>{
+        if(lp[k] !== undefined) rp[k] = lp[k];
+      });
+      rp.updatedAt = lp.updatedAt;
+    }
+    rp.barcodes = [...new Set([...(rp.barcodes||[]), ...(lp.barcodes||[])])];
+  });
+
   // Printer deletions always win outright — printer ids are always freshly
   // random (never reused), so there's no "re-registered the same id" case to
   // preserve the way there is for skus keyed by barcode.
@@ -1978,7 +2211,7 @@ function mergeData(base, local, remote){
   merged.printerLog = merged.printerLog.filter(l=>survivingPrinterIds.has(l.printerId));
 
   const localSettings = local.settings || {};
-  ['brands','materials','issueCategories','printerGroups'].forEach(k=>{
+  ['brands','materials','issueCategories','printerGroups','partCategories'].forEach(k=>{
     const seen = new Set((merged.settings[k]||[]).map(v=>v.toLowerCase()));
     (localSettings[k]||[]).forEach(v=>{
       if(!seen.has(v.toLowerCase())){ merged.settings[k].push(v); seen.add(v.toLowerCase()); }
@@ -2481,14 +2714,61 @@ function ensureListedColor(color){
 }
 
 /* ---------- Tabs ---------- */
-function switchTab(tab){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.tab===tab));
-  if(tab === 'addfilament'){
+/* ---------- Two-level navigation ----------
+   Main tabs group the app's areas; the tinted subnav band underneath shows
+   that area's pages. Panels keep their original data-tab ids, so switchTab()
+   still works anywhere it's referenced — it just lights up the right main
+   tab too. */
+const MAIN_TABS = {
+  filament: { subs: [['inventory','Inventory'], ['addfilament','Stock In/Out'], ['reorder','Reorder']] },
+  printers: { subs: [['maintenance','Printers'], ['parts','Parts'], ['partsstock','Stock In/Out'], ['partsreorder','Reorder']] },
+  reports:  { subs: [] },
+  settings: { subs: [] }
+};
+let currentMainTab = 'filament';
+// Remember the last sub tab per main tab, so flipping between main tabs
+// lands back where you were rather than always resetting to the first page.
+const lastSubForMain = {};
+function mainTabForPanel(panel){
+  for(const [main, def] of Object.entries(MAIN_TABS)){
+    if(def.subs.some(s=>s[0]===panel)) return main;
+  }
+  return MAIN_TABS[panel] ? panel : 'filament';
+}
+function switchMainTab(main){
+  currentMainTab = main;
+  const def = MAIN_TABS[main];
+  const panel = def.subs.length ? (lastSubForMain[main] || def.subs[0][0]) : main;
+  activatePanel(panel);
+}
+function switchTab(panel){
+  currentMainTab = mainTabForPanel(panel);
+  activatePanel(panel);
+}
+function activatePanel(panel){
+  const def = MAIN_TABS[currentMainTab];
+  if(def.subs.length) lastSubForMain[currentMainTab] = panel;
+  document.querySelectorAll('.tab-btn[data-main]').forEach(b=>b.classList.toggle('active', b.dataset.main===currentMainTab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.dataset.tab===panel));
+  renderSubnav(panel);
+  if(panel === 'addfilament'){
     const scanPanelActive = document.querySelector('.subpanel[data-sub="scan"]').classList.contains('active');
     if(scanPanelActive) setTimeout(()=>document.getElementById('barcodeInput').focus(), 30);
   }
+  if(panel === 'partsstock'){
+    setTimeout(()=>document.getElementById('partsBarcodeInput').focus(), 30);
+  }
 }
+function renderSubnav(activePanel){
+  const def = MAIN_TABS[currentMainTab];
+  const bar = document.getElementById('subnav');
+  if(!def.subs.length){ bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  document.getElementById('subnavInner').innerHTML = def.subs.map(([id,label])=>
+    `<button class="subnav-btn${id===activePanel?' active':''}" onclick="switchTab('${id}')">${label}</button>`
+  ).join('');
+}
+renderSubnav('inventory');
 function switchSubtab(sub){
   document.querySelectorAll('.subtabs .subtab-btn[data-sub]').forEach(b=>b.classList.toggle('active', b.dataset.sub===sub));
   document.querySelectorAll('.subpanel[data-sub]').forEach(p=>p.classList.toggle('active', p.dataset.sub===sub));
@@ -2799,6 +3079,13 @@ barcodeInput.addEventListener('keydown', (e)=>{
 });
 function processScan(code){
   const sku = findSkuByBarcode(code);
+  if(!sku){
+    const part = findPartByBarcode(code);
+    if(part){
+      toast('That barcode belongs to spare part "' + partLabel(part) + '" — use 3D Printers \u2192 Stock In/Out to scan parts.');
+      return;
+    }
+  }
   if(currentMode === 'in'){
     if(sku){
       captureUndo();
@@ -3280,7 +3567,9 @@ function computeDbHealth(){
     { label:'Settings', bytes: measureBytes(data.settings) },
     { label:'Feedback', bytes: measureBytes(data.feedback) },
     { label:'Order History', bytes: measureBytes(data.orderLog) },
-    { label:'Scan Log', bytes: measureBytes(data.scanLog) }
+    { label:'Scan Log', bytes: measureBytes(data.scanLog) },
+    { label:'Spare Parts', bytes: measureBytes(data.parts) },
+    { label:'Parts Scan Log', bytes: measureBytes(data.partsScanLog) }
   ].sort((a,b)=>b.bytes-a.bytes);
   const sectionsTotal = sections.reduce((s,x)=>s+x.bytes, 0);
   const largest = sections[0];
@@ -3290,6 +3579,7 @@ function computeDbHealth(){
 
   const recordCounts = [
     { label:'SKUs', count: Object.keys(data.skus).length },
+    { label:'Spare Parts', count: Object.keys(data.parts).length },
     { label:'Activity Events', count: data.events.length },
     { label:'Printer Logs', count: data.printerLog.length },
     { label:'Scan Logs', count: data.scanLog.length },
@@ -3345,6 +3635,10 @@ function renderAll(){
   renderRecentLog();
   renderScanLog();
   renderReorderReport();
+  renderParts();
+  renderPartsScanLog();
+  renderPartsReorder();
+  renderPartsReportSection();
   renderMaintenance();
   renderPrinterReportSummary();
   renderReport();
@@ -3413,6 +3707,17 @@ function reconcileOrderTracking(d){
         sku.ordered = false;
         sku.orderedAt = null;
       }
+    }
+  });
+  // Spare parts get the same self-clearing "ordered" badge: once qty is back
+  // above threshold, the flag drops on its own. (No shipping-time stats for
+  // parts — just the badge lifecycle.)
+  Object.values(d.parts || {}).forEach(p=>{
+    if(isLowPart(p)){
+      if(!p.lowSince) p.lowSince = now;
+    } else {
+      if(p.lowSince) p.lowSince = null;
+      if(p.ordered){ p.ordered = false; p.orderedAt = null; }
     }
   });
   // A filament removed from tracking while an order was pending on it would
@@ -4106,7 +4411,9 @@ function copyReorderReport(){
 const ACTION_LABELS = {
   scan_in:'Scanned in', scan_out:'Scanned out', scan_out_no_box:'Scanned out (no box)',
   sku_created:'Added filament', manual_add:'Added stock', adjust_box:'Adjusted boxes', adjust_loose:'Adjusted loose',
-  open_box:'Opened box', loose_consumed:'Spool used up', undo_scan:'Undone'
+  open_box:'Opened box', loose_consumed:'Spool used up', undo_scan:'Undone',
+  part_scan_in:'Part scanned in', part_scan_out:'Part scanned out', part_created:'Added part',
+  part_adjust:'Adjusted part qty', part_removed:'Removed part', part_import:'Imported parts', undo_part_scan:'Undone'
 };
 let recentLogLimit = 25;
 function renderRecentLog(){
@@ -4115,8 +4422,14 @@ function renderRecentLog(){
   const list = document.getElementById('recentLogList');
   document.getElementById('recentLogEmpty').style.display = events.length ? 'none' : 'block';
   list.innerHTML = events.map(ev=>{
-    const sku = data.skus[ev.skuId];
-    const name = sku ? skuLabel(sku) : '(removed filament)';
+    let name;
+    if(ev.partId !== undefined){
+      const part = data.parts[ev.partId];
+      name = part ? partLabel(part) : '(removed part)';
+    } else {
+      const sku = data.skus[ev.skuId];
+      name = sku ? skuLabel(sku) : '(removed filament)';
+    }
     const dt = new Date(ev.timestamp);
     const timeStr = dt.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' + dt.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
     return `
@@ -4790,6 +5103,553 @@ function renderPrinterReportSummary(){
     </div>`).join('');
 }
 
+/* ---------- Spare parts ----------
+   Mirrors the filament inventory system: shared data, low stock warnings
+   with per-part thresholds, self-clearing "ordered" badges, barcode scan
+   in/out with its own recent-scans undo list, and a reorder report. Parts
+   track a single quantity (no boxed/loose split). */
+let partsScanMode = 'out';
+let editingPartId = null;
+let editingPartBarcodes = [];
+let editingPartBarcodePrefill = null;
+let currentPartCategoryFilter = '';
+
+function logPartEvent(partId, action, delta, source){
+  data.events.push({ id: uid('evt'), partId, action, delta, source, timestamp: Date.now() });
+}
+function ensurePartCategory(cat){
+  if(!cat) return;
+  const exists = data.settings.partCategories.some(c=>c.toLowerCase()===cat.toLowerCase());
+  if(!exists){
+    data.settings.partCategories.push(cat);
+    data.settings.partCategories.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+  }
+}
+function refreshPartCategoryList(){
+  const dl = document.getElementById('partCategoryList');
+  if(dl) dl.innerHTML = data.settings.partCategories.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+}
+function partReorderQty(p){
+  if(!p.targetStock) return 0;
+  return Math.max(0, p.targetStock - p.qty);
+}
+
+/* ----- Parts list rendering ----- */
+function renderPartCategoryFilterDropdown(){
+  const listEl = document.getElementById('partCategoryFilterList');
+  if(!listEl) return;
+  const cats = [...new Set(Object.values(data.parts).map(p=>p.category || 'Other'))]
+    .sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+  listEl.innerHTML = `<div class="hover-dd-item" onclick="selectPartCategoryFilter('')">All categories</div>` +
+    cats.map(c=>`<div class="hover-dd-item" onclick="selectPartCategoryFilter('${jsStr(c)}')">${escapeHtml(c)}</div>`).join('');
+  if(currentPartCategoryFilter && !cats.includes(currentPartCategoryFilter)) currentPartCategoryFilter = '';
+  document.getElementById('partCategoryFilterDisplay').textContent = currentPartCategoryFilter || 'All categories';
+}
+function selectPartCategoryFilter(cat){
+  currentPartCategoryFilter = cat;
+  document.getElementById('partCategoryFilterDisplay').textContent = cat || 'All categories';
+  renderParts();
+}
+function clearPartsSearch(){
+  const input = document.getElementById('partsSearchInput');
+  input.value = '';
+  document.getElementById('partsSearchClearBtn').style.display = 'none';
+  renderParts();
+  input.focus();
+}
+function renderParts(){
+  const body = document.getElementById('partsBody');
+  if(!body || !data) return;
+  refreshPartCategoryList();
+  renderPartCategoryFilterDropdown();
+
+  const all = Object.values(data.parts);
+  document.getElementById('statParts').textContent = all.length;
+  document.getElementById('statPartsQty').textContent = all.reduce((s,p)=>s+p.qty,0);
+  document.getElementById('statPartsLow').textContent = all.filter(isLowPart).length;
+
+  const search = document.getElementById('partsSearchInput').value.toLowerCase();
+  const searchTerms = search.split(/\s+/).filter(Boolean);
+  const lowOnly = document.getElementById('partsLowOnlyToggle').checked;
+
+  let parts = all.filter(p=>{
+    const text = (p.name + ' ' + (p.mpn||'') + ' ' + (p.category||'') + ' ' + (p.models||'') + ' ' + (p.barcodes||[]).join(' ')).toLowerCase();
+    if(searchTerms.length && !searchTerms.every(t=>text.includes(t))) return false;
+    if(currentPartCategoryFilter && (p.category||'Other') !== currentPartCategoryFilter) return false;
+    if(lowOnly && !isLowPart(p)) return false;
+    return true;
+  }).sort((a,b)=>{
+    const ca = (a.category||'Other'), cb = (b.category||'Other');
+    if(ca !== cb) return ca.localeCompare(cb, undefined, {sensitivity:'base'});
+    return a.name.localeCompare(b.name, undefined, {sensitivity:'base'});
+  });
+
+  document.getElementById('partsEmptyState').style.display = parts.length ? 'none' : 'block';
+
+  let lastCat = null;
+  const rows = [];
+  parts.forEach(p=>{
+    const cat = p.category || 'Other';
+    if(cat !== lastCat){
+      const groupParts = parts.filter(x=>(x.category||'Other')===cat);
+      const qtyTotal = groupParts.reduce((s,x)=>s+x.qty,0);
+      rows.push(`<tr class="material-group-row"><td colspan="3"><div class="material-group-band" style="border-left-color:${groupColor(cat)};">${escapeHtml(cat)}<span class="group-meta">— ${groupParts.length} part${groupParts.length!==1?'s':''}, ${qtyTotal} unit${qtyTotal!==1?'s':''}</span></div></td></tr>`);
+      lastCat = cat;
+    }
+    const isLow = isLowPart(p);
+    const isEmpty = p.qty === 0;
+    const metaBits = [];
+    if(p.mpn) metaBits.push('MPN ' + escapeHtml(p.mpn));
+    if(p.models) metaBits.push('Fits: ' + escapeHtml(p.models));
+    if(p.location) metaBits.push(escapeHtml(p.location));
+    if(p.barcodes && p.barcodes.length) metaBits.push(`<span class="prod-barcode-inline">${escapeHtml(p.barcodes[0])}${p.barcodes.length>1 ? ' +'+(p.barcodes.length-1)+' more' : ''}</span>`);
+    rows.push(`
+    <tr class="${p.ordered ? 'on-order-row' : (isLow ? 'low-stock' : '')}">
+      <td>
+        <div class="filament-cell">
+          <div>
+            <span class="prod-name">${escapeHtml(p.name)}</span>
+            ${p.ordered ? '<span class="order-badge">ORDERED</span>' : (isEmpty ? '<span class="empty-badge">OUT OF STOCK</span>' : (isLow ? '<span class="low-badge">LOW</span>' : ''))}
+            ${p.lowStockDisabled ? '<span class="low-badge" style="color:var(--text-muted);border-color:var(--border);">NO WARNING</span>' : ''}
+            ${metaBits.length ? `<span class="prod-meta-line">${metaBits.join(' - ')}</span>` : ''}
+            ${p.description ? `<span class="prod-meta-line" title="${escapeHtml(p.description)}">${escapeHtml(truncateWords(p.description, 14))}</span>` : ''}
+            ${p.notes ? `<span class="prod-meta-line prod-notes" title="${escapeHtml(p.notes)}">&#128221; ${escapeHtml(truncateWords(p.notes, 14))}</span>` : ''}
+          </div>
+        </div>
+      </td>
+      <td><div class="count-cell"><span class="count-num">${p.qty}</span><button class="icon-btn" onclick="adjustPartQty('${jsStr(p.id)}', -1)" title="Use one">&minus;1</button><button class="icon-btn" onclick="adjustPartQty('${jsStr(p.id)}', 1)" title="Add one">+1</button></div></td>
+      <td><div class="row-actions">${(()=>{ const u = normalizeUrl(p.purchaseUrl||''); return isSafeHttpUrl(u) ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">Buy</a>` : ''; })()}<button class="icon-btn" onclick="openPartModal('${jsStr(p.id)}')">Edit</button><button class="icon-btn" onclick="deletePart('${jsStr(p.id)}')">Remove</button></div></td>
+    </tr>`);
+  });
+  body.innerHTML = rows.join('');
+}
+function adjustPartQty(id, delta){
+  const p = data.parts[id];
+  if(!p) return;
+  if(delta < 0 && p.qty <= 0){ toast('Already at 0'); return; }
+  captureUndo();
+  p.qty = Math.max(0, p.qty + delta);
+  p.updatedAt = Date.now();
+  logPartEvent(id, 'part_adjust', delta, 'manual');
+  saveData(); renderAll();
+  showUndoBar((delta>0?'+':'') + delta + ' ' + partLabel(p) + ' — now ' + p.qty);
+}
+function deletePart(id){
+  const p = data.parts[id];
+  if(!p) return;
+  if(!confirm('Remove "' + partLabel(p) + '" from spare parts tracking?')) return;
+  captureUndo();
+  logPartEvent(id, 'part_removed', -p.qty, 'manual');
+  delete data.parts[id];
+  saveData(); renderAll();
+  showUndoBar('Removed ' + partLabel(p));
+}
+
+/* ----- Add / edit part modal ----- */
+async function openPartModal(id, barcodePrefill){
+  await preEditRefresh();
+  editingPartId = id || null;
+  editingPartBarcodePrefill = null;
+  const p = id ? data.parts[id] : null;
+  if(id && !p){ toast('That part is no longer in the shared data'); return; }
+  document.getElementById('partModalTitle').textContent = p ? 'Edit spare part' : 'Add spare part';
+  document.getElementById('partModalSub').textContent = p
+    ? 'Update details, correct the count, or set the low stock threshold.'
+    : (barcodePrefill ? "This barcode hasn't been logged before. Fill this in once — future scans handle themselves." : 'Track a spare part with low stock warnings, just like filament.');
+  document.getElementById('p_name').value = p ? p.name : '';
+  document.getElementById('p_mpn').value = p ? (p.mpn||'') : '';
+  document.getElementById('p_category').value = p ? (p.category||'') : '';
+  document.getElementById('p_models').value = p ? (p.models||'') : '';
+  document.getElementById('p_qty').value = p ? p.qty : (barcodePrefill && partsScanMode==='in' ? 1 : 1);
+  document.getElementById('p_location').value = p ? (p.location||'') : '';
+  document.getElementById('p_threshold').value = p ? p.lowStockThreshold : 1;
+  document.getElementById('p_threshold').disabled = p ? !!p.lowStockDisabled : false;
+  document.getElementById('p_disableLowStock').checked = p ? !!p.lowStockDisabled : false;
+  document.getElementById('p_targetStock').value = p ? (p.targetStock || '') : '';
+  document.getElementById('p_purchaseUrl').value = p ? (p.purchaseUrl||'') : '';
+  document.getElementById('p_description').value = p ? (p.description||'') : '';
+  document.getElementById('p_notes').value = p ? (p.notes||'') : '';
+  document.getElementById('p_newBarcode').value = '';
+  editingPartBarcodes = p ? (p.barcodes||[]).slice() : (barcodePrefill ? [barcodePrefill] : []);
+  if(barcodePrefill) editingPartBarcodePrefill = barcodePrefill;
+  renderPartBarcodeList();
+  refreshPartCategoryList();
+  document.getElementById('partOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('p_name').focus(), 50);
+}
+function renderPartBarcodeList(){
+  const el = document.getElementById('p_barcodeList');
+  el.innerHTML = editingPartBarcodes.length
+    ? editingPartBarcodes.map((b,i)=>`<div class="settings-list-item"><span class="name-wrap mono">${escapeHtml(b)}</span><button class="remove-x" onclick="removeBarcodeFromEditingPart(${i})">&times;</button></div>`).join('')
+    : '<div class="empty-state" style="padding:8px;">No barcodes yet.</div>';
+}
+function addBarcodeToEditingPart(){
+  const input = document.getElementById('p_newBarcode');
+  const code = input.value.trim();
+  if(!code) return;
+  if(editingPartBarcodes.includes(code)){ toast('Already on this part'); input.value=''; return; }
+  const clash = Object.values(data.parts).find(p=>p.id!==editingPartId && (p.barcodes||[]).includes(code));
+  if(clash){ toast('That barcode already belongs to ' + partLabel(clash)); return; }
+  editingPartBarcodes.push(code);
+  input.value = '';
+  renderPartBarcodeList();
+}
+function removeBarcodeFromEditingPart(index){
+  editingPartBarcodes.splice(index, 1);
+  renderPartBarcodeList();
+}
+function closePartModal(){
+  document.getElementById('partOverlay').classList.remove('open');
+  editingPartId = null;
+  if(editingPartBarcodePrefill){
+    editingPartBarcodePrefill = null;
+    const scanInput = document.getElementById('partsBarcodeInput');
+    if(scanInput && document.querySelector('.tab-panel[data-tab="partsstock"]').classList.contains('active')) scanInput.focus();
+  }
+}
+function savePartModal(){
+  const name = document.getElementById('p_name').value.trim();
+  if(!name){ toast('Item name is required'); return; }
+  const category = document.getElementById('p_category').value.trim() || 'Other';
+  const qty = Math.max(0, parseInt(document.getElementById('p_qty').value) || 0);
+  const threshold = Math.max(0, parseInt(document.getElementById('p_threshold').value) || 0);
+  const targetRaw = document.getElementById('p_targetStock').value;
+  const targetStock = targetRaw === '' ? 0 : Math.max(0, parseInt(targetRaw) || 0);
+  captureUndo();
+  ensurePartCategory(category);
+  const fields = {
+    name, category,
+    mpn: document.getElementById('p_mpn').value.trim(),
+    models: document.getElementById('p_models').value.trim(),
+    location: document.getElementById('p_location').value.trim(),
+    purchaseUrl: normalizeUrl(document.getElementById('p_purchaseUrl').value),
+    description: document.getElementById('p_description').value.trim(),
+    notes: document.getElementById('p_notes').value.trim(),
+    lowStockThreshold: threshold,
+    lowStockDisabled: document.getElementById('p_disableLowStock').checked,
+    targetStock,
+    barcodes: editingPartBarcodes.slice()
+  };
+  if(editingPartId){
+    const p = data.parts[editingPartId];
+    if(!p){ toast('That part is no longer in the shared data'); closePartModal(); return; }
+    const qtyDelta = qty - p.qty;
+    Object.assign(p, fields);
+    p.qty = qty;
+    p.updatedAt = Date.now();
+    if(qtyDelta !== 0) logPartEvent(p.id, 'part_adjust', qtyDelta, 'manual');
+    saveData(); renderAll(); closePartModal();
+    showUndoBar('Updated ' + partLabel(p));
+  } else {
+    const id = editingPartBarcodes[0] || uid('part');
+    const p = { id, ...fields, qty, createdAt: Date.now(), updatedAt: Date.now() };
+    data.parts[id] = p;
+    logPartEvent(id, 'part_created', qty, editingPartBarcodePrefill ? 'barcode' : 'manual');
+    if(editingPartBarcodePrefill){
+      addPartsScanLogEntry(p, partLabel(p), qty, 'Registered new part', 'barcode', {qty: -qty});
+    }
+    saveData(); renderAll(); closePartModal();
+    showUndoBar('Added ' + partLabel(p));
+  }
+}
+
+/* ----- Parts barcode scanning ----- */
+function setPartsMode(mode){
+  partsScanMode = mode;
+  document.getElementById('partsModeInBtn').classList.toggle('active', mode==='in');
+  document.getElementById('partsModeOutBtn').classList.toggle('active', mode==='out');
+  document.getElementById('partsModeHint').textContent = mode==='in'
+    ? "Scanning a known barcode adds one unit to that part's stock. An unrecognized barcode opens a short form to register it once."
+    : "Scanning a known barcode removes one unit from that part's stock.";
+  document.getElementById('partsBarcodeInput').focus();
+}
+function processPartScan(code){
+  const p = findPartByBarcode(code);
+  if(!p){
+    const sku = findSkuByBarcode(code);
+    if(sku){
+      toast('That barcode belongs to filament "' + skuLabel(sku) + '" — use Filament \u2192 Stock In/Out to scan filament.');
+      return;
+    }
+    openPartModal(null, code);
+    return;
+  }
+  if(partsScanMode === 'in'){
+    captureUndo();
+    p.qty += 1; p.updatedAt = Date.now();
+    logPartEvent(p.id, 'part_scan_in', 1, 'barcode');
+    addPartsScanLogEntry(p, partLabel(p), 1, 'Scanned in', 'barcode', {qty:-1});
+    saveData(); renderAll();
+    showUndoBar('+1 ' + partLabel(p) + ' — now ' + p.qty);
+  } else {
+    if(p.qty <= 0){
+      toast('No stock on hand for ' + partLabel(p) + ' — nothing removed');
+      return;
+    }
+    captureUndo();
+    p.qty -= 1; p.updatedAt = Date.now();
+    logPartEvent(p.id, 'part_scan_out', 1, 'barcode');
+    addPartsScanLogEntry(p, partLabel(p), -1, 'Scanned out', 'barcode', {qty:1});
+    saveData(); renderAll();
+    showUndoBar('-1 ' + partLabel(p) + ' — now ' + p.qty);
+  }
+}
+function addPartsScanLogEntry(part, label, delta, actionLabel, source, reverse){
+  data.partsScanLog.push({
+    id: uid('pscanlog'),
+    timestamp: Date.now(),
+    partId: part ? part.id : null,
+    label, delta, actionLabel, source, reverse,
+    undone: false
+  });
+  if(data.partsScanLog.length > 20) data.partsScanLog = data.partsScanLog.slice(-20);
+}
+function undoPartsScanLogEntry(logId){
+  const entry = data.partsScanLog.find(e=>e.id===logId);
+  if(!entry || entry.undone) return;
+  const p = entry.partId ? data.parts[entry.partId] : null;
+  if(!p){
+    entry.undone = true;
+    saveData(); renderPartsScanLog();
+    toast('That part no longer exists');
+    return;
+  }
+  if(entry.reverse.qty) p.qty = Math.max(0, p.qty + entry.reverse.qty);
+  p.updatedAt = Date.now();
+  logPartEvent(p.id, 'undo_part_scan', -entry.delta, 'undo');
+  entry.undone = true;
+  saveData();
+  renderAll();
+  toast('Reverted: ' + entry.label);
+}
+function renderPartsScanLog(){
+  const list = document.getElementById('partsScanLogList');
+  if(!list || !data) return;
+  const entries = [...data.partsScanLog].sort((a,b)=>b.timestamp-a.timestamp);
+  document.getElementById('partsScanLogEmpty').style.display = entries.length ? 'none' : 'block';
+  list.innerHTML = entries.map(entry=>{
+    const dt = new Date(entry.timestamp);
+    const timeStr = dt.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' + dt.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+    return `
+    <div class="log-row">
+      <div class="log-time">${timeStr}</div>
+      <div class="log-action">${escapeHtml(entry.actionLabel)}</div>
+      <div class="log-item">${escapeHtml(entry.label)}</div>
+      <div class="log-delta">${entry.delta>0?'+':''}${entry.delta}</div>
+      ${entry.undone
+        ? '<span class="scanlog-undone-tag">Undone</span>'
+        : `<button class="scanlog-undo-btn" onclick="undoPartsScanLogEntry('${jsStr(entry.id)}')">Undo</button>`}
+    </div>`;
+  }).join('');
+}
+
+/* ----- Parts reorder ----- */
+function computePartsReorderRows(){
+  return Object.values(data.parts)
+    .filter(isLowPart)
+    .sort((a,b)=>{
+      const ao = a.ordered ? 1 : 0, bo = b.ordered ? 1 : 0;
+      if(ao !== bo) return ao - bo;
+      if(a.qty !== b.qty) return a.qty - b.qty;
+      return a.name.localeCompare(b.name, undefined, {sensitivity:'base'});
+    });
+}
+function renderPartsReorder(){
+  const list = document.getElementById('partsReorderList');
+  if(!list || !data) return;
+  const rows = computePartsReorderRows();
+  document.getElementById('partsReorderEmpty').style.display = rows.length ? 'none' : 'block';
+  list.innerHTML = rows.map(p=>{
+    const reorderQty = partReorderQty(p);
+    const u = normalizeUrl(p.purchaseUrl||'');
+    const buyLink = isSafeHttpUrl(u)
+      ? `<a class="icon-btn" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">Buy &rarr;</a>`
+      : '<span class="footer-note" style="margin:0;">No link</span>';
+    const statusHtml = p.ordered
+      ? `<button class="order-btn undo-order" onclick="unmarkPartOrdered('${jsStr(p.id)}')" title="Click if this wasn't actually ordered, or was ordered by mistake">Ordered &mdash; undo</button>`
+      : `<button class="order-btn" onclick="markPartOrdered('${jsStr(p.id)}')">Mark ordered</button>`;
+    return `
+    <div class="log-row${p.ordered ? ' on-order-row' : ''}">
+      <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(p.name)}</div>
+      <div style="width:110px;text-align:right;color:var(--text-muted);" class="mono">${escapeHtml(p.mpn||'—')}</div>
+      <div style="width:80px;text-align:right;">${p.qty}</div>
+      <div style="width:90px;text-align:right;font-weight:700;" title="${p.targetStock ? 'Target stock (' + p.targetStock + ') minus what\'s on hand now' : 'Set a target stock in Edit to get a reorder suggestion'}">${reorderQty > 0 ? reorderQty : '—'}</div>
+      <div style="width:90px;text-align:right;">${buyLink}</div>
+      <div style="width:140px;text-align:right;">${statusHtml}</div>
+    </div>`;
+  }).join('');
+}
+function markPartOrdered(id){
+  const p = data.parts[id];
+  if(!p || p.ordered) return;
+  p.ordered = true;
+  p.orderedAt = Date.now();
+  p.updatedAt = Date.now();
+  saveData(); renderAll();
+  toast('Marked ordered: ' + partLabel(p));
+}
+function unmarkPartOrdered(id){
+  const p = data.parts[id];
+  if(!p || !p.ordered) return;
+  p.ordered = false;
+  p.orderedAt = null;
+  p.updatedAt = Date.now();
+  saveData(); renderAll();
+  toast('Unmarked as ordered: ' + partLabel(p));
+}
+function copyPartsReorderReport(){
+  const rows = computePartsReorderRows();
+  if(!rows.length){ toast('No spare parts need reordering right now'); return; }
+  const lines = rows.map(p=>{
+    const qty = partReorderQty(p);
+    const link = normalizeUrl(p.purchaseUrl||'') || 'no link';
+    return `${qty > 0 ? qty + ' of ' : ''}${partLabel(p)} — ${link}`;
+  });
+  const text = lines.join('\n\n');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard')).catch(()=>toast('Could not copy — try again'));
+  } else {
+    toast('Clipboard not available in this browser');
+  }
+}
+
+/* ----- Reports: spare parts section ----- */
+function renderPartsReportSection(){
+  const list = document.getElementById('repPartsReorderList');
+  if(!list || !data) return;
+  const all = Object.values(data.parts);
+  document.getElementById('repPartsTotal').textContent = all.length;
+  document.getElementById('repPartsLow').textContent = all.filter(isLowPart).length;
+  document.getElementById('repPartsOnOrder').textContent = all.filter(p=>p.ordered).length;
+  const rows = computePartsReorderRows();
+  document.getElementById('repPartsReorderEmpty').style.display = rows.length ? 'none' : 'block';
+  list.innerHTML = rows.map(p=>{
+    const reorderQty = partReorderQty(p);
+    return `
+    <div class="log-row${p.ordered ? ' on-order-row' : ''}">
+      <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(p.name)}${p.mpn ? ` <span class="mono" style="color:var(--text-muted);font-size:11px;">${escapeHtml(p.mpn)}</span>` : ''}${p.ordered ? ' <span class="order-badge">ORDERED</span>' : ''}</div>
+      <div style="width:90px;text-align:right;">${p.qty} on hand</div>
+      <div style="width:110px;text-align:right;font-weight:700;">${reorderQty > 0 ? 'Reorder ' + reorderQty : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ----- Parts CSV import / export ----- */
+function parseCSVText(text){
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQ){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQ = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQ = true;
+      else if(c === ',' ){ row.push(field); field = ''; }
+      else if(c === '\n' || c === '\r'){
+        if(c === '\r' && text[i+1] === '\n') i++;
+        row.push(field); rows.push(row); row = []; field = '';
+      }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(cell=>cell.trim() !== ''));
+}
+function openPartsImportModal(){
+  document.getElementById('partsImportText').value = '';
+  document.getElementById('partsImportOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('partsImportText').focus(), 50);
+}
+function closePartsImportModal(){
+  document.getElementById('partsImportOverlay').classList.remove('open');
+}
+function handlePartsImportFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{ document.getElementById('partsImportText').value = e.target.result; };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+function runPartsImport(){
+  const text = document.getElementById('partsImportText').value;
+  if(!text.trim()){ toast('Paste CSV text or choose a file first'); return; }
+  const rows = parseCSVText(text);
+  if(!rows.length){ toast('No rows found in that CSV'); return; }
+  let start = 0;
+  const header = rows[0].map(c=>c.toLowerCase());
+  if(header.some(c=>c.includes('barcode') || c.includes('item name') || c.includes('mpn') || c.includes('qty'))) start = 1;
+  const body = rows.slice(start);
+  if(!body.length){ toast('No data rows found (only a header)'); return; }
+  captureUndo();
+  let added = 0, updated = 0, skipped = 0;
+  body.forEach(r=>{
+    const cell = i => (r[i] || '').trim();
+    const barcode = cell(0), qtyRaw = cell(1), name = cell(2), mpn = cell(3),
+          category = cell(4), models = cell(5), description = cell(6), notes = cell(7);
+    if(!name && !barcode){ skipped++; return; }
+    const qty = Math.max(0, parseInt(qtyRaw) || 0);
+    let part = barcode ? findPartByBarcode(barcode) : null;
+    if(!part && name){
+      part = Object.values(data.parts).find(p=>
+        p.name.toLowerCase() === name.toLowerCase() &&
+        (p.mpn||'').toLowerCase() === mpn.toLowerCase());
+    }
+    if(part){
+      part.qty = qty;
+      if(name) part.name = name;
+      if(mpn) part.mpn = mpn;
+      if(category) part.category = category;
+      if(models) part.models = models;
+      if(description) part.description = description;
+      if(notes) part.notes = notes;
+      if(barcode && !part.barcodes.includes(barcode)) part.barcodes.push(barcode);
+      part.updatedAt = Date.now();
+      updated++;
+    } else {
+      const id = barcode || uid('part');
+      data.parts[id] = {
+        id, barcodes: barcode ? [barcode] : [],
+        name: name || ('Part ' + (mpn || barcode)),
+        mpn, category: category || 'Other', models, description, notes,
+        location: '', purchaseUrl: '',
+        qty, lowStockThreshold: 1, lowStockDisabled: false,
+        targetStock: 2,
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+      logPartEvent(id, 'part_created', qty, 'import');
+      added++;
+    }
+    if(category) ensurePartCategory(category);
+  });
+  saveData(); renderAll(); closePartsImportModal();
+  showUndoBar('Imported: ' + added + ' new, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' skipped' : ''));
+}
+function exportPartsCSV(){
+  const rows = [['Barcode','Qty','Item Name','MPN (Bambu part number)','Category','Compatible Models','Description','Source/Notes']];
+  Object.values(data.parts)
+    .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}))
+    .forEach(p=>{
+      rows.push([
+        (p.barcodes||[]).join('; '), p.qty, p.name, p.mpn||'',
+        p.category||'', p.models||'', p.description||'', p.notes||''
+      ]);
+    });
+  downloadCSV('spare-parts-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+  toast('Spare parts CSV downloaded');
+}
+const partsBarcodeInputEl = document.getElementById('partsBarcodeInput');
+partsBarcodeInputEl.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    const code = partsBarcodeInputEl.value.trim();
+    partsBarcodeInputEl.value = '';
+    if(code) processPartScan(code);
+  }
+});
+
 /* ---------- Data tools ---------- */
 function csvEscape(val){
   const str = String(val === undefined || val === null ? '' : val);
@@ -4826,8 +5686,14 @@ function exportEventsCSV(){
   [...data.events]
     .sort((a,b)=>a.timestamp-b.timestamp)
     .forEach(ev=>{
-      const sku = data.skus[ev.skuId];
-      const name = sku ? skuLabel(sku) : '(removed filament)';
+      let name;
+      if(ev.partId !== undefined){
+        const part = data.parts[ev.partId];
+        name = part ? partLabel(part) : '(removed part)';
+      } else {
+        const sku = data.skus[ev.skuId];
+        name = sku ? skuLabel(sku) : '(removed filament)';
+      }
       const dt = new Date(ev.timestamp);
       rows.push([dt.toLocaleDateString(), dt.toLocaleTimeString(), ACTION_LABELS[ev.action] || ev.action, name, ev.delta, ev.source]);
     });

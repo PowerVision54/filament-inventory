@@ -6393,8 +6393,9 @@ async function sendAskAi(){
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2048,
+        max_tokens: 4000,
         stream: true,
+        thinking: { type: 'disabled' },
         system: askAiSystemPrompt(),
         messages: apiMessages
       })
@@ -6407,40 +6408,54 @@ async function sendAskAi(){
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    let stopReason = '';
+    const handleEvent = (evt)=>{
+      const dline = evt.split('\n').find(l=>l.startsWith('data:'));
+      if(!dline) return;
+      let payload;
+      try{ payload = JSON.parse(dline.slice(5).trim()); }catch(e){ return; }
+      if(payload.type === 'message_start' && payload.message && payload.message.usage){
+        const u = payload.message.usage;
+        usage.i  = u.input_tokens || 0;
+        usage.cw = u.cache_creation_input_tokens || 0;
+        usage.cr = u.cache_read_input_tokens || 0;
+      } else if(payload.type === 'content_block_delta' && payload.delta && payload.delta.type === 'text_delta'){
+        answer += payload.delta.text;
+        live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span>';
+        body.scrollTop = body.scrollHeight;
+      } else if(payload.type === 'message_delta'){
+        if(payload.usage) usage.o = payload.usage.output_tokens || usage.o;
+        if(payload.delta && payload.delta.stop_reason) stopReason = payload.delta.stop_reason;
+      } else if(payload.type === 'error'){
+        throw new Error((payload.error && payload.error.message) || 'Streaming error');
+      }
+    };
     while(true){
       const { done, value } = await reader.read();
       if(done) break;
       buf += decoder.decode(value, { stream:true });
-      const events = buf.split('\n\n');
+      const events = buf.split(/\r?\n\r?\n/);
       buf = events.pop();
-      for(const evt of events){
-        const dline = evt.split('\n').find(l=>l.startsWith('data:'));
-        if(!dline) continue;
-        let payload;
-        try{ payload = JSON.parse(dline.slice(5).trim()); }catch(e){ continue; }
-        if(payload.type === 'message_start' && payload.message && payload.message.usage){
-          const u = payload.message.usage;
-          usage.i  = u.input_tokens || 0;
-          usage.cw = u.cache_creation_input_tokens || 0;
-          usage.cr = u.cache_read_input_tokens || 0;
-        } else if(payload.type === 'content_block_delta' && payload.delta && payload.delta.type === 'text_delta'){
-          answer += payload.delta.text;
-          live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span>';
-          body.scrollTop = body.scrollHeight;
-        } else if(payload.type === 'message_delta' && payload.usage){
-          usage.o = payload.usage.output_tokens || usage.o;
-        } else if(payload.type === 'error'){
-          throw new Error((payload.error && payload.error.message) || 'Streaming error');
-        }
-      }
+      for(const evt of events) handleEvent(evt);
     }
-    if(!answer.trim()) answer = '(No answer returned.)';
-    askAiThread.push({ role:'assistant', content: answer });
+    if(buf.trim()) handleEvent(buf);
+
     if(usage.o || usage.i || usage.cr){
       lastCost = recordAskAiUsage(model, usage);
       renderAskAiUsage();
     }
-    persistCurrentChat();
+    if(!answer.trim()){
+      const why = stopReason === 'max_tokens'
+        ? 'The reply was cut off before any text came through — hit Send to try again, or ask a shorter question.'
+        : stopReason === 'refusal'
+          ? 'Claude declined to answer that one. Try rewording it.'
+          : 'No answer came back. Hit Send to try again.';
+      askAiThread.push({ role:'error', content: why });
+    } else {
+      if(stopReason === 'max_tokens') answer += '\n\n_(response was cut off here)_';
+      askAiThread.push({ role:'assistant', content: answer });
+      persistCurrentChat();
+    }
   }catch(err){
     let msg = err.message || String(err);
     if(/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the Claude API. Check your connection, or the API key may be invalid.";

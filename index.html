@@ -683,6 +683,26 @@
     border-radius:14px;padding:5px 10px;cursor:pointer;transition:border-color 0.15s ease;
   }
   #askAiQuick .ai-chip:hover{border-color:var(--accent-in);}
+  #askAiQuick .ai-chip.action{border-left:3px solid var(--accent-in);padding-left:8px;}
+  #askAiQuick .ai-chip.action::after{content:"can apply changes";display:block;font-size:8.5px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:var(--accent-in-dark);margin-top:2px;}
+  .ai-proposal{border:1px solid var(--accent-in);border-left:3px solid var(--accent-in);border-radius:10px;padding:12px 14px;margin-top:8px;background:var(--brand-tint);}
+  .ai-proposal h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent-in-dark);font-family:'IBM Plex Mono',monospace;}
+  .ai-proposal-row{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid rgba(17,71,53,0.14);font-size:12.5px;}
+  .ai-proposal-row:last-of-type{border-bottom:none;}
+  .ai-proposal-row input[type=checkbox]{margin-top:2px;flex-shrink:0;}
+  .ai-proposal-row.invalid{opacity:0.55;}
+  .ai-chg-item{font-weight:600;}
+  .ai-chg-detail{color:var(--text);}
+  .ai-chg-old{color:var(--text-muted);text-decoration:line-through;}
+  .ai-chg-new{font-weight:700;}
+  .ai-chg-reason{display:block;color:var(--text-muted);font-size:11px;margin-top:1px;}
+  .ai-chg-error{display:block;color:var(--danger);font-size:11px;margin-top:1px;}
+  .ai-proposal-actions{display:flex;gap:8px;margin-top:11px;align-items:center;}
+  .ai-proposal-actions .btn{flex:none;padding:6px 14px;font-size:11.5px;}
+  .ai-proposal-actions a{font-size:11px;color:var(--text-muted);text-decoration:underline;cursor:pointer;}
+  .ai-proposal.done{background:var(--input-bg);border-color:var(--border);border-left-color:var(--border);}
+  .ai-proposal .ai-proposal-status{font-size:11.5px;font-weight:600;color:var(--accent-in-dark);}
+  .ai-proposal.dismissed .ai-proposal-status{color:var(--text-muted);}
   #askAiFoot{padding:12px 20px 16px;border-top:1px solid var(--border);}
   #askAiFoot .ai-input-row{display:flex;gap:8px;align-items:flex-end;}
   #askAiInput{
@@ -743,7 +763,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.22</div>
+    <div class="sub">V0.23</div>
   </div>
 </header>
 
@@ -1189,6 +1209,13 @@
         </select>
       </div>
       <p class="footer-note" style="margin-bottom:0;">For privacy: your question and an inventory snapshot are sent to Anthropic's API when you ask. Anthropic does not train on API data.</p>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 6px;">Extra context</h3>
+      <p class="footer-note" style="margin-top:0;margin-bottom:8px;">Free-form notes sent with <em>every</em> Ask AI request, so you don't have to repeat yourself. Good for things like hours you work, lead times, how you like to plan builds, naming quirks, or anything else that helps the answers land. Saved only in this browser.</p>
+      <textarea id="askAiExtraContext" rows="4" class="notes-input" style="width:100%;font-size:12.5px;" placeholder="e.g. I work 8:30am–4:30pm Mon–Fri. Filament orders take about a week to arrive. I usually batch big print runs on weekends."></textarea>
+      <div class="footer-row" style="margin-top:8px;align-items:center;">
+        <button class="btn primary" onclick="saveAskAiExtraContext()">Save context</button>
+        <span id="askAiExtraContextSaved" class="footer-note" style="margin:0;"></span>
+      </div>
       <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 6px;">Estimated cost</h3>
       <div id="askAiUsageSettings"></div>
       <p class="footer-note" style="margin-bottom:0;">Estimated from token counts returned by the API, using list prices for the model used. Tracked only in this browser (not synced). <a onclick="resetAskAiUsage()" style="text-decoration:underline;cursor:pointer;">Reset counters</a></p>
@@ -5981,7 +6008,11 @@ function resetAskAiUsage(){
 /* ----- Chat history (last 20, browser-only) ----- */
 function persistCurrentChat(){
   const msgs = askAiThread.filter(m=>m.role === 'user' || m.role === 'assistant')
-    .map(m=>({ role:m.role, content:m.content }));
+    .map(m=>{
+      const o = { role:m.role, content:m.content };
+      if(m.proposal) o.proposal = m.proposal;
+      return o;
+    });
   if(!msgs.some(m=>m.role === 'assistant')) return;
   let c = askAiChats.find(x=>x.id === currentChatId);
   if(!c){ c = { id: currentChatId, ts: Date.now(), label: askAiContextLabel() }; askAiChats.push(c); }
@@ -6019,7 +6050,11 @@ function renderAskAiHistory(){
 function loadAskAiChat(id){
   const c = askAiChats.find(x=>x.id === id);
   if(!c) return;
-  askAiThread = c.messages.map(m=>({ role:m.role, content:m.content }));
+  askAiThread = c.messages.map(m=>{
+    const o = { role:m.role, content:m.content };
+    if(m.proposal) o.proposal = m.proposal;
+    return o;
+  });
   currentChatId = c.id;
   toggleAskAiHistory();
   document.getElementById('askAiContextTag').textContent = c.label || askAiContextLabel();
@@ -6040,6 +6075,8 @@ function renderAskAiSettings(){
   const box = document.getElementById('askAiKeyState');
   const sel = document.getElementById('askAiModelSelect');
   if(sel) sel.value = askAiModel();
+  const ctx = document.getElementById('askAiExtraContext');
+  if(ctx && document.activeElement !== ctx) ctx.value = askAiConfig.extraContext || '';
   renderAskAiUsage();
   if(!box) return;
   if(hasAskAiKey()){
@@ -6087,6 +6124,20 @@ function saveAskAiModel(){
   const note = document.getElementById('askAiModelNote');
   if(note) note.textContent = ASKAI_MODELS[askAiModel()];
 }
+function saveAskAiExtraContext(){
+  const el = document.getElementById('askAiExtraContext');
+  if(!el) return;
+  const val = el.value.trim();
+  if(val.length > 4000){ toast('Extra context is a bit long — keep it under 4000 characters'); return; }
+  askAiConfig.extraContext = val;
+  saveAskAiConfig();
+  const flag = document.getElementById('askAiExtraContextSaved');
+  if(flag){
+    flag.textContent = val ? '✓ Saved — sent with every request' : '✓ Cleared';
+    flag.style.color = 'var(--accent-in-dark)';
+  }
+  toast('Extra context saved');
+}
 function updateAskAiPillVisibility(){
   const pill = document.getElementById('askAiPill');
   if(pill) pill.style.display = 'flex';
@@ -6110,8 +6161,11 @@ function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString() : '—'; }
    that matches the page you're on. Other areas get a one-line summary so
    cross-cutting questions still have a foothold without paying for the full dump.
    The Reports and Printers/Maintenance pages get everything relevant to them. */
+let askAiRefMap = {};
 function buildAskAiContext(){
   const lines = [];
+  askAiRefMap = {};
+  let refN = 0;
   const panel = document.querySelector('.tab-panel.active');
   const panelId = panel ? panel.dataset.tab : currentMainTab;
   const skus = Object.values(data.skus || {});
@@ -6140,9 +6194,11 @@ function buildAskAiContext(){
 
   if(isFilament || isReports){
     lines.push('=== FILAMENT INVENTORY (' + skus.length + ') ===');
-    lines.push('brand | material | color | sealed boxes | loose spools | kg/box | location | favorite | low threshold | target | on order | notes');
+    lines.push('ref | brand | material | color | sealed boxes | loose spools | kg/box | location | favorite | low threshold | target | on order | notes');
     skus.forEach(s=>{
-      lines.push([s.brand, s.material, s.colorName, s.boxCount, s.looseCount || 0,
+      const ref = 'F' + (++refN);
+      askAiRefMap[ref] = { type:'filament', id:s.id };
+      lines.push([ref, s.brand, s.material, s.colorName, s.boxCount, s.looseCount || 0,
         s.weightPerBoxKg || 1, s.location || '-', s.favorite ? 'yes' : 'no',
         s.lowStockDisabled ? 'off' : s.lowStockThreshold, s.targetStock,
         s.ordered ? 'yes' : 'no', s.notes || '-'].join(' | '));
@@ -6158,9 +6214,11 @@ function buildAskAiContext(){
 
   if(isParts || isMaint || isReports){
     lines.push('=== SPARE PARTS INVENTORY (' + parts.length + ') ===');
-    lines.push('name | mpn | category | on hand | compatible models | location | low threshold | target | description/notes');
+    lines.push('ref | name | mpn | category | on hand | compatible models | location | low threshold | target | description/notes');
     parts.forEach(p=>{
-      lines.push([p.name, p.mpn || '-', p.category || 'Other', p.qty, p.models || '-', p.location || '-',
+      const ref = 'P' + (++refN);
+      askAiRefMap[ref] = { type:'part', id:p.id };
+      lines.push([ref, p.name, p.mpn || '-', p.category || 'Other', p.qty, p.models || '-', p.location || '-',
         p.lowStockThreshold, p.targetStock, ((p.description || '') + ' ' + (p.notes || '')).trim() || '-'].join(' | '));
     });
     lines.push('');
@@ -6218,16 +6276,46 @@ const ASKAI_INSTRUCTIONS = [
   "You can convert and recompute report figures (grams/kg to ounces, pounds, and US tons; spool estimates; spend) and point out trends, risks, or gaps.",
   "For projected usage, base the rate on the recent activity in the snapshot, state the assumption, and give the projection for the month, quarter, and year in kg, pounds, and US tons side by side.",
   "Keep answers tight. Use short markdown: bullet lists, and tables when comparing numbers.",
-  "The snapshot is scoped to the page the user is on. If it only contains a one-line summary for the area they're asking about, say which tab they should open so you can see the full list."
+  "The snapshot is scoped to the page the user is on. If it only contains a one-line summary for the area they're asking about, say which tab they should open so you can see the full list.",
+  "",
+  "TAKING ACTION: when the user asks you to change target stock, low-stock thresholds, the favorite flag, or on-order status — or clearly wants you to act, not just advise — call the propose_inventory_changes tool with the specific items, using the exact [F#]/[P#] reference tokens from the snapshot. favorite and on-order are filament-only. Still explain your reasoning in a short text reply. The user reviews and approves every change before anything is applied, so propose the full set you'd recommend. Only call the tool when the snapshot actually contains the full item list (not just a summary), and never call it just to illustrate a point."
 ].join('\n');
+
+const ASKAI_TOOL = {
+  name: 'propose_inventory_changes',
+  description: "Propose changes to reversible inventory policy settings for the user to review and apply. The user approves every change individually before anything happens. You cannot change on-hand counts, names, barcodes, or delete anything — only the fields listed.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      changes: {
+        type: 'array',
+        description: 'One entry per setting you want to change.',
+        items: {
+          type: 'object',
+          properties: {
+            ref: { type: 'string', description: 'The [F#] (filament) or [P#] (part) reference token from the snapshot.' },
+            field: { type: 'string', enum: ['targetStock','lowStockThreshold','favorite','ordered'], description: 'Which setting to change. favorite and ordered are filament-only.' },
+            value: { description: 'New value: a non-negative whole number for targetStock/lowStockThreshold; true or false for favorite/ordered.' },
+            reason: { type: 'string', description: 'A few words on why, shown next to the change.' }
+          },
+          required: ['ref','field','value']
+        }
+      }
+    },
+    required: ['changes']
+  }
+};
 
 /* Returned as an array so the big snapshot sits behind a cache_control breakpoint —
    follow-up questions in the same chat re-use it at ~10% of the input price. */
 function askAiSystemPrompt(){
-  return [
-    { type:'text', text: ASKAI_INSTRUCTIONS },
-    { type:'text', text: '--- LIVE INVENTORY SNAPSHOT ---\n' + buildAskAiContext(), cache_control:{ type:'ephemeral' } }
-  ];
+  const blocks = [{ type:'text', text: ASKAI_INSTRUCTIONS }];
+  const extra = (askAiConfig.extraContext || '').trim();
+  if(extra){
+    blocks.push({ type:'text', text: "--- CONTEXT THE USER ADDED (background about how they work; use it when relevant) ---\n" + extra });
+  }
+  blocks.push({ type:'text', text: '--- LIVE INVENTORY SNAPSHOT ---\n' + buildAskAiContext(), cache_control:{ type:'ephemeral' } });
+  return blocks;
 }
 
 /* ----- Quick prompts, per area ----- */
@@ -6235,12 +6323,14 @@ function askAiQuickPrompts(){
   const panel = document.querySelector('.tab-panel.active');
   const id = panel ? panel.dataset.tab : '';
 
+  const act = q => ({ q, action:true });
+
   if(currentMainTab === 'reports' || id === 'reports'){
     return [
       'Project my filament usage for the coming month, quarter, and year from recent consumption. Show each in kg, pounds, and US tons.',
       'Give me the boss bird’s-eye-view summary.',
       'What changed in the reports that actually matters?',
-      'What should I reorder based on usage, not just low-stock levels?',
+      act('Adjust my filament target stock based on real usage, not just low-stock levels.'),
       'What am I at risk of running out of in the next 30 days?',
       'What are we wasting money on?',
       'What are the biggest inventory risks right now?',
@@ -6267,16 +6357,16 @@ function askAiQuickPrompts(){
       'What spare parts am I low on right now?',
       'Which parts fit the X1C but not the P1S?',
       'What’s the Bambu name for the part that grips the filament in the extruder, and do I have one?',
-      'What should I check before starting a big print run?'
+      act('Set sensible target stock and low-stock thresholds for my spare parts.')
     ];
   }
 
   if(id === 'reorder'){
     return [
-      'What should I reorder based on usage, not just low-stock levels?',
+      act('Recommend reorders based on usage, not just low-stock levels, and adjust target stock to match.'),
       'What am I at risk of running out of in the next 30 days?',
-      'Which filament should I increase the target stock for?',
-      'Which filament should I lower the target stock for?',
+      act('Raise the target stock on the filament I run through fastest.'),
+      act('Lower the target stock on filament that’s barely moving.'),
       'What filament is dead inventory?',
       'What are the biggest inventory risks right now?'
     ];
@@ -6288,7 +6378,7 @@ function askAiQuickPrompts(){
     'What filament has a lot of loose spools I should use up? List the ones most in need of using up first.',
     'What filament is dead inventory?',
     'What am I at risk of running out of in the next 30 days?',
-    'Which filament should I increase or lower the target stock for?',
+    act('Review my filament target stock levels and fix any that look wrong.'),
     'What inventory looks unusual or needs my attention?',
     'Analyze my inventory and tell me something I should know.',
     'What am I overlooking?'
@@ -6330,27 +6420,190 @@ function newAskAiChat(){
 function renderAskAiQuick(){
   const wrap = document.getElementById('askAiQuick');
   wrap.style.display = askAiThread.length ? 'none' : 'flex';
-  wrap.innerHTML = askAiQuickPrompts().map(q=>
-    '<button class="ai-chip" onclick="askAiQuickSend(this)">' + escapeHtml(q) + '</button>'
-  ).join('');
+  wrap.innerHTML = askAiQuickPrompts().map(item=>{
+    const q = typeof item === 'string' ? item : item.q;
+    const cls = (typeof item === 'object' && item.action) ? 'ai-chip action' : 'ai-chip';
+    return '<button class="' + cls + '" data-q="' + escapeHtml(q) + '" onclick="askAiQuickSend(this)">' + escapeHtml(q) + '</button>';
+  }).join('');
 }
 function askAiQuickSend(btn){
-  document.getElementById('askAiInput').value = btn.textContent;
+  document.getElementById('askAiInput').value = btn.dataset.q || btn.textContent;
   sendAskAi();
 }
 function renderAskAiThread(){
   const body = document.getElementById('askAiBody');
   if(!askAiThread.length){
     body.innerHTML = '<div class="ai-empty">Ask anything about <strong>' + escapeHtml(askAiContextLabel()) +
-      '</strong>. Your question goes to Claude along with a snapshot of your filament, parts and printers.</div>';
+      '</strong>. Your question goes to Claude with a snapshot of your filament, parts and printers. For target stock, thresholds, favorites and on-order status it can also suggest changes for you to review and apply.</div>';
     return;
   }
-  body.innerHTML = askAiThread.map(m=>{
+  body.innerHTML = askAiThread.map((m, idx)=>{
     if(m.role === 'user') return '<div class="ai-msg user">' + escapeHtml(m.content) + '</div>';
     if(m.role === 'error') return '<div class="ai-msg error">' + escapeHtml(m.content) + '</div>';
-    return '<div class="ai-msg assistant">' + aiMarkdown(m.content) + '</div>';
+    let html = '<div class="ai-msg assistant">';
+    if(m.content && m.content.trim()) html += aiMarkdown(m.content);
+    if(m.proposal) html += renderAskAiProposal(m.proposal, idx);
+    return html + '</div>';
   }).join('');
   body.scrollTop = body.scrollHeight;
+}
+function fieldLabel(f){
+  return { targetStock:'target stock', lowStockThreshold:'low-stock threshold', favorite:'favorite', ordered:'on order' }[f] || f;
+}
+function renderAskAiProposal(prop, idx){
+  const rows = prop.changes.map((c, i)=>{
+    if(!c.valid){
+      return '<div class="ai-proposal-row invalid"><input type="checkbox" disabled>' +
+        '<div><span class="ai-chg-item">' + escapeHtml(c.itemLabel || c.ref) + '</span> ' +
+        '<span class="ai-chg-error">' + escapeHtml(c.error || 'can’t apply this one') + '</span></div></div>';
+    }
+    const pending = prop.status === 'pending';
+    const checkedAttr = pending ? ' checked' : ((prop.appliedRefs || []).includes(c.ref) ? ' checked' : '');
+    return '<div class="ai-proposal-row">' +
+      '<input type="checkbox" id="aiChg_' + idx + '_' + i + '"' + checkedAttr + (pending ? '' : ' disabled') + '>' +
+      '<div><span class="ai-chg-item">' + escapeHtml(c.itemLabel) + '</span> — ' +
+      '<span class="ai-chg-detail">' + escapeHtml(fieldLabel(c.field)) + ' ' +
+      '<span class="ai-chg-old">' + escapeHtml(String(c.oldDisplay)) + '</span> → ' +
+      '<span class="ai-chg-new">' + escapeHtml(String(c.newDisplay)) + '</span></span>' +
+      (c.reason ? '<span class="ai-chg-reason">' + escapeHtml(c.reason) + '</span>' : '') +
+      '</div></div>';
+  }).join('');
+
+  let footer;
+  if(prop.status === 'pending'){
+    const n = prop.changes.filter(c=>c.valid).length;
+    footer = '<div class="ai-proposal-actions">' +
+      '<button class="btn primary" onclick="applyAskAiProposal(' + idx + ')">Apply changes</button>' +
+      '<a onclick="dismissAskAiProposal(' + idx + ')">Dismiss</a>' +
+      '</div>';
+    if(!n) footer = '<div class="ai-proposal-actions"><span class="ai-proposal-status">Nothing here can be applied.</span></div>';
+  } else if(prop.status === 'applied'){
+    footer = '<div class="ai-proposal-actions"><span class="ai-proposal-status">✓ Applied ' +
+      (prop.appliedRefs || []).length + ' change' + ((prop.appliedRefs || []).length !== 1 ? 's' : '') +
+      ' — use the Undo bar to reverse.</span></div>';
+  } else {
+    footer = '<div class="ai-proposal-actions"><span class="ai-proposal-status">Dismissed — no changes made.</span></div>';
+  }
+
+  const cls = 'ai-proposal' + (prop.status === 'applied' ? ' done' : '') + (prop.status === 'dismissed' ? ' done dismissed' : '');
+  return '<div class="' + cls + '"><h4>Suggested changes</h4>' + rows + footer + '</div>';
+}
+function resolveAskAiChange(c){
+  const out = { ref: c.ref, field: c.field, value: c.value, reason: (c.reason || '').trim(), valid: false, error: '' };
+  const map = askAiRefMap[String(c.ref || '').trim()];
+  if(!map){ out.error = 'couldn’t match ' + (c.ref || '(no ref)'); return out; }
+  if(!['targetStock','lowStockThreshold','favorite','ordered'].includes(c.field)){ out.error = 'unsupported field'; return out; }
+  out.itemType = map.type; out.itemId = map.id;
+  const isBool = (c.field === 'favorite' || c.field === 'ordered');
+  if(map.type === 'part' && isBool){ out.error = 'that field is filament-only'; return out; }
+
+  const obj = map.type === 'filament' ? (data.skus[map.id]) : (data.parts[map.id]);
+  if(!obj){ out.error = 'item no longer exists'; return out; }
+  out.itemLabel = map.type === 'filament' ? skuLabel(obj) : partLabel(obj);
+
+  if(isBool){
+    const nv = (c.value === true || c.value === 'true' || c.value === 1);
+    out.newVal = nv; out.oldVal = !!obj[c.field];
+    out.oldDisplay = out.oldVal ? 'yes' : 'no';
+    out.newDisplay = out.newVal ? 'yes' : 'no';
+  } else {
+    const n = parseInt(c.value, 10);
+    if(!Number.isFinite(n) || n < 0 || n > 100000){ out.error = 'not a valid number'; return out; }
+    out.newVal = n;
+    out.oldVal = (c.field === 'lowStockThreshold' && obj.lowStockDisabled) ? 0 : (obj[c.field] || 0);
+    out.oldDisplay = out.oldVal;
+    out.newDisplay = n;
+  }
+  if(out.oldVal === out.newVal){ out.error = 'already set to that'; return out; }
+  out.valid = true;
+  return out;
+}
+function proposalOutcomeText(prop){
+  if(prop.status === 'pending') return 'The proposed changes are shown to the user for review. Nothing has been applied yet.';
+  if(prop.status === 'dismissed') return 'The user dismissed the proposal. No changes were made.';
+  const applied = prop.changes.filter(c=>(prop.appliedRefs || []).includes(c.ref));
+  const skipped = prop.changes.filter(c=>c.valid && !(prop.appliedRefs || []).includes(c.ref));
+  let t = 'The user applied: ' + (applied.map(c=>c.itemLabel + ' ' + fieldLabel(c.field) + ' → ' + c.newDisplay).join('; ') || '(none)') + '.';
+  if(skipped.length) t += ' They skipped: ' + skipped.map(c=>c.itemLabel + ' ' + fieldLabel(c.field)).join('; ') + '.';
+  return t;
+}
+function applyAskAiProposal(idx){
+  const m = askAiThread[idx];
+  if(!m || !m.proposal || m.proposal.status !== 'pending') return;
+  const prop = m.proposal;
+  const picked = [];
+  prop.changes.forEach((c, i)=>{
+    if(!c.valid) return;
+    const box = document.getElementById('aiChg_' + idx + '_' + i);
+    if(box && box.checked) picked.push(c);
+  });
+  if(!picked.length){ toast('Tick at least one change to apply'); return; }
+
+  captureUndo();
+  const applied = [];
+  picked.forEach(c=>{
+    if(c.itemType === 'filament'){
+      const sku = data.skus[c.itemId];
+      if(!sku) return;
+      if(c.field === 'favorite'){ sku.favorite = c.newVal; sku.updatedAt = Date.now(); }
+      else if(c.field === 'ordered'){
+        if(c.newVal) markSkuOrdered(c.itemId); else unmarkSkuOrdered(c.itemId);
+      } else {
+        if(c.field === 'lowStockThreshold') sku.lowStockDisabled = false;
+        sku[c.field] = c.newVal; sku.updatedAt = Date.now();
+      }
+    } else {
+      const p = data.parts[c.itemId];
+      if(!p) return;
+      if(c.field === 'lowStockThreshold') p.lowStockDisabled = false;
+      p[c.field] = c.newVal; p.updatedAt = Date.now();
+    }
+    applied.push(c.ref);
+  });
+
+  prop.status = 'applied';
+  prop.appliedRefs = applied;
+  saveData();
+  renderAll();
+  refreshAllDropdownSources();
+  showUndoBar('AI applied ' + applied.length + ' change' + (applied.length !== 1 ? 's' : ''));
+  persistCurrentChat();
+  renderAskAiThread();
+}
+function dismissAskAiProposal(idx){
+  const m = askAiThread[idx];
+  if(!m || !m.proposal || m.proposal.status !== 'pending') return;
+  m.proposal.status = 'dismissed';
+  persistCurrentChat();
+  renderAskAiThread();
+}
+function buildAskAiApiMessages(){
+  const msgs = [];
+  let pendingToolResult = null;
+  askAiThread.forEach(m=>{
+    if(m.role === 'error') return;
+    if(m.role === 'user'){
+      if(pendingToolResult){
+        msgs.push({ role:'user', content:[ pendingToolResult, { type:'text', text:m.content } ] });
+        pendingToolResult = null;
+      } else {
+        msgs.push({ role:'user', content:m.content });
+      }
+      return;
+    }
+    // assistant
+    if(m.proposal){
+      const content = [];
+      if(m.content && m.content.trim()) content.push({ type:'text', text:m.content });
+      content.push({ type:'tool_use', id:m.proposal.toolUseId, name:'propose_inventory_changes', input:{ changes:m.proposal.rawChanges } });
+      msgs.push({ role:'assistant', content });
+      pendingToolResult = { type:'tool_result', tool_use_id:m.proposal.toolUseId, content: proposalOutcomeText(m.proposal) };
+    } else {
+      msgs.push({ role:'assistant', content:m.content });
+    }
+  });
+  if(pendingToolResult) msgs.push({ role:'user', content:[ pendingToolResult ] });
+  return msgs;
 }
 
 async function sendAskAi(){
@@ -6375,8 +6628,7 @@ async function sendAskAi(){
   body.appendChild(live);
   body.scrollTop = body.scrollHeight;
 
-  const apiMessages = askAiThread.filter(m=>m.role === 'user' || m.role === 'assistant')
-    .map(m=>({ role: m.role, content: m.content }));
+  const apiMessages = buildAskAiApiMessages();
   const model = askAiModel();
   const usage = { i:0, cw:0, cr:0, o:0 };
 
@@ -6396,6 +6648,7 @@ async function sendAskAi(){
         max_tokens: 4000,
         stream: true,
         thinking: { type: 'disabled' },
+        tools: [ ASKAI_TOOL ],
         system: askAiSystemPrompt(),
         messages: apiMessages
       })
@@ -6409,6 +6662,7 @@ async function sendAskAi(){
     const decoder = new TextDecoder();
     let buf = '';
     let stopReason = '';
+    let toolUse = null; // { id, json }
     const handleEvent = (evt)=>{
       const dline = evt.split('\n').find(l=>l.startsWith('data:'));
       if(!dline) return;
@@ -6419,10 +6673,15 @@ async function sendAskAi(){
         usage.i  = u.input_tokens || 0;
         usage.cw = u.cache_creation_input_tokens || 0;
         usage.cr = u.cache_read_input_tokens || 0;
+      } else if(payload.type === 'content_block_start' && payload.content_block && payload.content_block.type === 'tool_use'){
+        toolUse = { id: payload.content_block.id, json: '' };
+        live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span><div class="ai-chg-reason">preparing suggested changes…</div>';
       } else if(payload.type === 'content_block_delta' && payload.delta && payload.delta.type === 'text_delta'){
         answer += payload.delta.text;
         live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span>';
         body.scrollTop = body.scrollHeight;
+      } else if(payload.type === 'content_block_delta' && payload.delta && payload.delta.type === 'input_json_delta'){
+        if(toolUse) toolUse.json += (payload.delta.partial_json || '');
       } else if(payload.type === 'message_delta'){
         if(payload.usage) usage.o = payload.usage.output_tokens || usage.o;
         if(payload.delta && payload.delta.stop_reason) stopReason = payload.delta.stop_reason;
@@ -6444,7 +6703,21 @@ async function sendAskAi(){
       lastCost = recordAskAiUsage(model, usage);
       renderAskAiUsage();
     }
-    if(!answer.trim()){
+
+    let proposal = null;
+    if(toolUse){
+      let raw = [];
+      try{
+        const parsed = JSON.parse(toolUse.json || '{}');
+        if(Array.isArray(parsed.changes)) raw = parsed.changes;
+      }catch(e){}
+      const resolved = raw.map(resolveAskAiChange);
+      if(resolved.length){
+        proposal = { toolUseId: toolUse.id, rawChanges: raw, changes: resolved, status: 'pending', appliedRefs: [] };
+      }
+    }
+
+    if(!answer.trim() && !proposal){
       const why = stopReason === 'max_tokens'
         ? 'The reply was cut off before any text came through — hit Send to try again, or ask a shorter question.'
         : stopReason === 'refusal'
@@ -6453,7 +6726,9 @@ async function sendAskAi(){
       askAiThread.push({ role:'error', content: why });
     } else {
       if(stopReason === 'max_tokens') answer += '\n\n_(response was cut off here)_';
-      askAiThread.push({ role:'assistant', content: answer });
+      const msg = { role:'assistant', content: answer };
+      if(proposal) msg.proposal = proposal;
+      askAiThread.push(msg);
       persistCurrentChat();
     }
   }catch(err){
@@ -6608,6 +6883,16 @@ updateAskAiPillVisibility();
   });
   document.addEventListener('keydown', (e)=>{
     if(e.key === 'Escape') closeAskAi();
+  });
+  const ctx = document.getElementById('askAiExtraContext');
+  if(ctx) ctx.addEventListener('input', ()=>{
+    const saved = (askAiConfig.extraContext || '');
+    const flag = document.getElementById('askAiExtraContextSaved');
+    if(flag){
+      const dirty = ctx.value.trim() !== saved.trim();
+      flag.textContent = dirty ? 'Unsaved changes' : '';
+      flag.style.color = 'var(--text-muted)';
+    }
   });
 })();
 

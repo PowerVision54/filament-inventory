@@ -689,8 +689,9 @@
     flex:1;resize:none;padding:9px 10px;border-radius:8px;border:1px solid var(--border);
     background:var(--input-bg);font-size:13px;font-family:inherit;line-height:1.4;max-height:120px;
   }
-  #askAiFoot .ai-foot-note{font-size:10px;color:var(--text-muted);margin-top:6px;display:flex;justify-content:space-between;gap:8px;}
-  #askAiFoot .ai-foot-note a{color:var(--text-muted);cursor:pointer;text-decoration:underline;}
+  #askAiFoot .ai-foot-note{font-size:10px;color:var(--text-muted);margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  #askAiFoot .ai-foot-actions{display:flex;gap:8px;}
+  #askAiFoot .ai-foot-actions .btn{flex:none;padding:6px 14px;font-size:11.5px;}
   .ai-key-mask{font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--chip-bg);border-radius:4px;padding:3px 7px;}
   #askAiModal .ai-head h3{flex-wrap:wrap;}
   .ai-head-link{margin-left:auto;font-size:11px;font-weight:600;color:var(--text-muted);text-decoration:underline;cursor:pointer;font-family:'IBM Plex Sans',system-ui,sans-serif;}
@@ -1528,7 +1529,10 @@
       <div class="ai-usage" id="askAiUsage"></div>
       <div class="ai-foot-note">
         <span id="askAiModelNote"></span>
-        <span><a onclick="newAskAiChat()">New chat</a> &nbsp;·&nbsp; <a onclick="closeAskAi()">Close</a></span>
+        <span class="ai-foot-actions">
+          <button class="btn" onclick="newAskAiChat()">New chat</button>
+          <button class="btn primary" onclick="closeAskAi()">Close</button>
+        </span>
       </div>
     </div>
   </div>
@@ -6211,7 +6215,8 @@ const ASKAI_INSTRUCTIONS = [
   "Answer using the inventory snapshot below plus general 3D-printing knowledge. Be concrete: name the exact items from their stock, with counts and locations.",
   "When they describe a part by function but not by name (a common problem with Bambu part names), map it to the most likely matching parts they actually have and say how confident you are.",
   "For filament questions, weigh material properties (heat resistance, strength, etc.) against what is actually in stock and recommend from that.",
-  "You can convert and recompute report figures (grams to ounces, spool estimates, spend, etc.) and point out trends, risks, or gaps.",
+  "You can convert and recompute report figures (grams/kg to ounces, pounds, and US tons; spool estimates; spend) and point out trends, risks, or gaps.",
+  "For projected usage, base the rate on the recent activity in the snapshot, state the assumption, and give the projection for the month, quarter, and year in kg, pounds, and US tons side by side.",
   "Keep answers tight. Use short markdown: bullet lists, and tables when comparing numbers.",
   "The snapshot is scoped to the page the user is on. If it only contains a one-line summary for the area they're asking about, say which tab they should open so you can see the full list."
 ].join('\n');
@@ -6229,28 +6234,64 @@ function askAiSystemPrompt(){
 function askAiQuickPrompts(){
   const panel = document.querySelector('.tab-panel.active');
   const id = panel ? panel.dataset.tab : '';
+
   if(currentMainTab === 'reports' || id === 'reports'){
     return [
-      'Summarize this report in plain language.',
+      'Project my filament usage for the coming month, quarter, and year from recent consumption. Show each in kg, pounds, and US tons.',
+      'Give me the boss bird’s-eye-view summary.',
+      'What changed in the reports that actually matters?',
+      'What should I reorder based on usage, not just low-stock levels?',
+      'What am I at risk of running out of in the next 30 days?',
+      'What are we wasting money on?',
+      'What are the biggest inventory risks right now?',
       'Convert all weights on this page to ounces and pounds.',
-      'What trends or problems should I be paying attention to?',
-      'Which filaments am I burning through fastest, and will I run out?',
-      'Estimate my filament spend over the last 30 days.'
+      'What should I do today to make sure the week goes well?'
     ];
   }
-  if(id === 'parts' || id === 'partsstock' || id === 'partsreorder' || currentMainTab === 'printers'){
+
+  if(id === 'maintenance'){
+    return [
+      'What do I need to do to fix the printers that are down?',
+      'What maintenance needs doing, and on which printer?',
+      'What is the most urgent problem here?',
+      'What printer is most likely to fail next?',
+      'What’s most likely the next problem I’ll have with my printers?',
+      'What have been my most and least reliable printers?',
+      'What should I check before starting a big print run?'
+    ];
+  }
+
+  if(id === 'parts' || id === 'partsstock' || id === 'partsreorder'){
     return [
       'I need the little rubber foot for the bottom of the printer — do I have it?',
       'What spare parts am I low on right now?',
       'Which parts fit the X1C but not the P1S?',
-      "What's the Bambu name for the part that grips the filament in the extruder, and do I have one?"
+      'What’s the Bambu name for the part that grips the filament in the extruder, and do I have one?',
+      'What should I check before starting a big print run?'
     ];
   }
+
+  if(id === 'reorder'){
+    return [
+      'What should I reorder based on usage, not just low-stock levels?',
+      'What am I at risk of running out of in the next 30 days?',
+      'Which filament should I increase the target stock for?',
+      'Which filament should I lower the target stock for?',
+      'What filament is dead inventory?',
+      'What are the biggest inventory risks right now?'
+    ];
+  }
+
+  // Filament: Inventory / Stock In-Out
   return [
     'What filament works best sitting somewhere hot, and do I have it?',
-    'What am I low on and should reorder?',
-    "What's a good strong material for functional parts from my stock?",
-    'Which colors do I have the most of?'
+    'What filament has a lot of loose spools I should use up? List the ones most in need of using up first.',
+    'What filament is dead inventory?',
+    'What am I at risk of running out of in the next 30 days?',
+    'Which filament should I increase or lower the target stock for?',
+    'What inventory looks unusual or needs my attention?',
+    'Analyze my inventory and tell me something I should know.',
+    'What am I overlooking?'
   ];
 }
 

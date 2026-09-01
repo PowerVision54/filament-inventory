@@ -458,6 +458,10 @@
     font-size:10px;font-weight:600;background:var(--chip-bg);color:var(--text-muted);
     border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap;
   }
+  /* Log notes can be several paragraphs now, so keep the line breaks the user typed. */
+  .log-note-text{white-space:pre-wrap;}
+  #plog_note{min-height:120px;line-height:1.5;}
+  .field-hint{font-size:11px;color:var(--text-muted);margin:5px 0 0;line-height:1.45;}
 
   .printer-group-section{margin-bottom:16px;}
   .printer-group-section:last-child{margin-bottom:0;}
@@ -733,6 +737,76 @@
     .log-time{width:90px;}
     .log-action{width:130px;}
   }
+
+  /* ---------- Phone, portrait only ----------
+     Desktop is the primary layout and landscape phone already works, so this
+     block stays above 580px-wide screens entirely. It only reflows the things
+     that actually break in portrait: anything wide enough to drag the whole
+     document sideways (which knocks the fixed-position modals off-centre) and
+     anything squeezed so hard it becomes unreadable. Scrolling is fine — the
+     page just has to scroll in one direction at a time. */
+  @media (max-width:580px){
+    /* The four main tabs were 406px wide on a 393px screen, so every page
+       started off horizontally scrollable before any content loaded. */
+    .tabs-inner{padding:0 10px;gap:0;}
+    .tab-btn{padding:11px 9px;font-size:12.5px;white-space:nowrap;}
+    .subnav-inner{padding:7px 10px;gap:4px;}
+    main{padding:12px 10px;}
+    section{padding:12px;}
+    header.top{padding:14px 12px;}
+    header.top h1{font-size:12.5px;letter-spacing:0.02em;}
+
+    /* Wide tables scroll inside their own card instead of stretching the page.
+       min-width keeps the columns readable rather than crushing the name
+       column to 90px and stacking every word vertically. */
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px;}
+    .table-scroll table{min-width:540px;}
+    /* iOS draws no persistent scrollbar, so the cut-off edge needs saying out
+       loud. Sticky keeps the cue in view while the table is scrolled. */
+    .table-scroll::after{
+      content:"Swipe the table sideways for the rest of each row";
+      display:block;position:sticky;left:0;
+      font-size:10.5px;color:var(--text-muted);padding-top:9px;
+    }
+
+    /* Two 175px printer tiles per row left no space for the name or selects. */
+    .printer-grid{grid-template-columns:1fr;}
+
+    /* Log rows: the fixed 90px + 130px columns left the note ~140px and pushed
+       the row's buttons past the right edge. Size to content and wrap instead. */
+    .log-row{flex-wrap:wrap;}
+    .log-time{width:auto;}
+    .log-action{width:auto;}
+    .log-item{min-width:150px;}
+    #printerMasterLogList .log-item{flex:1 1 100%;margin-top:2px;}
+    #printerMasterLogList .log-row{padding:10px 0;}
+
+    /* Filters read better stacked full-width than as three cramped columns.
+       !important is needed to beat the inline min-width on the dropdowns. */
+    .filter-row > .search-wrap{flex:1 1 100%;}
+    .filter-row .hover-dd{flex:1 1 100%;min-width:0 !important;}
+    .filter-row input[type="date"]{flex:1;min-width:0;}
+
+    /* Give modals the full width of the screen. */
+    .overlay{padding:14px 8px;}
+    .modal{padding:16px;}
+    #askAiModal{max-height:calc(100vh - 28px);}
+    #askAiBody{padding:14px;}
+    #askAiQuick{padding:0 14px 12px;}
+    #askAiFoot{padding:10px 14px 14px;}
+    .ai-msg{max-width:96%;}
+
+    /* Shrink the floating buttons so they cover less of the row behind them. */
+    #feedbackButton,#askAiPill,#syncIndicator{font-size:11px;padding:6px 11px;}
+    #askAiPill{bottom:54px;}
+
+    /* Row buttons were 21px tall — too small to hit reliably with a thumb. */
+    .icon-btn{padding:8px 11px;font-size:11.5px;}
+    .row-actions{gap:6px;}
+
+    /* Section header rows: title on one line, buttons on the next. */
+    .section-header-row{flex-wrap:wrap;}
+  }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
 
   /* ---------- Printable report ---------- */
@@ -812,12 +886,14 @@
         <button class="btn danger" onclick="bulkRemoveSelected()">Remove selected</button>
         <button class="btn" onclick="clearSelection()">Clear selection</button>
       </div>
-      <table>
-        <thead>
-          <tr><th style="width:28px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)"></th><th>Filament</th><th>Boxes</th><th></th></tr>
-        </thead>
-        <tbody id="inventoryBody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th style="width:28px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)"></th><th>Filament</th><th>Boxes</th><th></th></tr>
+          </thead>
+          <tbody id="inventoryBody"></tbody>
+        </table>
+      </div>
       <div class="empty-state" id="emptyState" style="display:none;">Nothing tracked yet. Use the Stock In/Out tab to get started.</div>
     </section>
 
@@ -1070,6 +1146,7 @@
 
     <section>
       <h2>Printer Log</h2>
+      <p class="footer-note" id="printerLogUnknownNote" style="display:none;margin-top:0;margin-bottom:10px;"></p>
       <div class="filter-row">
         <div class="search-wrap">
           <input type="text" id="printerLogSearchInput" placeholder="Search log by printer or note (e.g. jam)..." oninput="handlePrinterLogSearchInput(this.value)">
@@ -1128,12 +1205,14 @@
         </div>
         <label class="toggle-chip"><input type="checkbox" id="partsLowOnlyToggle" onchange="renderParts()"> Low stock only</label>
       </div>
-      <table>
-        <thead>
-          <tr><th>Part</th><th style="width:150px;">Qty</th><th></th></tr>
-        </thead>
-        <tbody id="partsBody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Part</th><th style="width:150px;">Qty</th><th></th></tr>
+          </thead>
+          <tbody id="partsBody"></tbody>
+        </table>
+      </div>
       <div class="empty-state" id="partsEmptyState" style="display:none;">No spare parts tracked yet. Use "Add part", the Stock In/Out sub tab, or "Import CSV" to get started.</div>
     </section>
 
@@ -1509,11 +1588,19 @@
   <div class="modal">
     <h3 id="plog_title">Log entry</h3>
     <div class="modal-sub" id="plog_sub"></div>
-    <div class="field" id="plog_categoryField"><label>Category</label><select id="plog_category"></select></div>
-    <div class="field"><label>Note</label><input type="text" id="plog_note" placeholder="Optional note..." onkeydown="if(event.key==='Enter')savePrinterLogModal();"></div>
+    <div class="field" id="plog_categoryField">
+      <label>Category</label>
+      <select id="plog_category"></select>
+      <p class="field-hint">Leave it on Unknown if you're in a hurry — Ask AI can categorize it later.</p>
+    </div>
+    <div class="field" style="margin-top:10px;">
+      <label>Note</label>
+      <textarea id="plog_note" class="notes-input" rows="6" placeholder="Optional note..." onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();savePrinterLogModal();}"></textarea>
+      <p class="field-hint">Enter starts a new line. Ctrl/&#8984; + Enter saves.</p>
+    </div>
     <div class="field" id="plog_fixField" style="display:none;margin-top:10px;">
       <label>What worked <span style="font-weight:400;">(optional)</span></label>
-      <textarea id="plog_fix" class="notes-input" rows="2" placeholder="e.g. Reseated the extruder gear and cleared filament dust"></textarea>
+      <textarea id="plog_fix" class="notes-input" rows="3" placeholder="e.g. Reseated the extruder gear and cleared filament dust"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closePrinterLogModal()">Cancel</button>
@@ -1797,6 +1884,12 @@ const DEFAULT_ISSUE_CATEGORIES = [
   'Print Quality','Support Issues','Mechanical','Temperature','Cooling','Filament',
   'Build Plate','Electronics','Camera / AI','User Error','Print Cancelled','Unknown'
 ];
+/* New issues and notes start on "Unknown" on purpose: capture first, categorize
+   later (by hand, or by asking the AI to do a pass over the log). */
+function defaultIssueCategory(){
+  const cats = data.settings.issueCategories || [];
+  return cats.find(c=>String(c).toLowerCase() === 'unknown') || cats[0] || '';
+}
 function statusLabel(status){ return PRINTER_STATUS_LABELS[status] || status; }
 function daysAgoLabel(ts){
   if(!ts) return 'Never';
@@ -1832,6 +1925,8 @@ function ensureSettingsDefaults(d){
   if(!d.settings.materials) d.settings.materials = DEFAULT_MATERIALS.slice();
   if(!d.settings.colors) d.settings.colors = DEFAULT_COLORS.map(c=>({...c}));
   if(!d.settings.issueCategories) d.settings.issueCategories = DEFAULT_ISSUE_CATEGORIES.slice();
+  // "Unknown" is the default pick when logging an issue or note, so it has to be there.
+  if(!d.settings.issueCategories.some(c=>String(c).toLowerCase() === 'unknown')) d.settings.issueCategories.push('Unknown');
   seedBambuColorsIfNeeded(d);
   d.settings.brands.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   d.settings.materials.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
@@ -5029,6 +5124,7 @@ async function openPrinterLogModal(printerId, type){
     categoryField.style.display = '';
     const sel = document.getElementById('plog_category');
     sel.innerHTML = data.settings.issueCategories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    sel.value = defaultIssueCategory();
   } else {
     categoryField.style.display = 'none';
   }
@@ -5056,7 +5152,7 @@ async function openEditPrinterLogModal(logId){
     categoryField.style.display = '';
     const sel = document.getElementById('plog_category');
     sel.innerHTML = data.settings.issueCategories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-    sel.value = entry.category || '';
+    sel.value = entry.category || defaultIssueCategory();
   } else {
     categoryField.style.display = 'none';
   }
@@ -5299,6 +5395,7 @@ function renderMaintenance(){
   renderMasterPrinterLog();
 }
 function renderMasterPrinterLog(){
+  renderPrinterLogUnknownNote();
   const term = printerLogSearchTerm;
   let entries = [...data.printerLog].sort((a,b)=>b.timestamp-a.timestamp);
   if(term){
@@ -5347,13 +5444,13 @@ function renderMasterPrinterLog(){
       ? `<button class="icon-btn" style="margin-left:8px;" onclick="resolvePrinterIssue('${jsStr(e.id)}')">Mark resolved</button>`
       : '';
     const fixLine = (e.type === 'issue' && e.fixText)
-      ? `<div class="prod-meta-line" style="margin-left:0;margin-top:3px;">&#10003; What worked: ${escapeHtml(e.fixText)}</div>`
+      ? `<div class="prod-meta-line log-note-text" style="margin-left:0;margin-top:3px;">&#10003; What worked: ${escapeHtml(e.fixText)}</div>`
       : '';
     return `
-    <div class="log-row">
+    <div class="log-row" style="align-items:flex-start;">
       <div class="log-time">${timeStr}</div>
       <div class="log-action">${p ? escapeHtml(p.name) : '(removed)'}</div>
-      <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: ${escapeHtml(e.text || '—')}${fixLine}</div>
+      <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: <span class="log-note-text">${escapeHtml(e.text || '—')}</span>${fixLine}</div>
       ${resolveBtn}
       <button class="icon-btn" style="margin-left:8px;" onclick="openEditPrinterLogModal('${jsStr(e.id)}')">Edit</button>
       <button class="icon-btn" style="margin-left:8px;" onclick="deletePrinterLogEntry('${jsStr(e.id)}')">Delete</button>
@@ -5368,6 +5465,32 @@ function renderMasterPrinterLog(){
   } else {
     moreBtn.style.display = 'none';
   }
+}
+/* Capture-first workflow: entries logged in a hurry sit on "Unknown" until
+   someone (or the AI) files them. Surface the backlog where the log is read. */
+function countUncategorizedLogEntries(){
+  return (data.printerLog || []).filter(e=>
+    (e.type === 'issue' || e.type === 'note') &&
+    (!e.category || String(e.category).toLowerCase() === 'unknown')
+  ).length;
+}
+function renderPrinterLogUnknownNote(){
+  const el = document.getElementById('printerLogUnknownNote');
+  if(!el) return;
+  const n = countUncategorizedLogEntries();
+  if(!n){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = n + ' entr' + (n !== 1 ? 'ies are' : 'y is') + ' still filed under Unknown. ' +
+    '<a onclick="askAiCategorizeLog()" style="cursor:pointer;text-decoration:underline;">Have AI categorize them</a> ' +
+    '— it suggests a category per note and you tick the ones you want.';
+}
+function askAiCategorizeLog(){
+  openAskAi();
+  const input = document.getElementById('askAiInput');
+  if(!input) return;
+  input.value = 'Categorize my Unknown printer notes.';
+  autoGrowAskAi();
+  input.focus();
 }
 function setPrinterMaintRange(days){
   currentPrinterMaintRange = days;
@@ -6505,13 +6628,25 @@ function buildAskAiContext(){
   if(isMaint || isReports){
     const log = (data.printerLog || []).slice().sort((a,b)=>b.timestamp - a.timestamp);
     lines.push('=== PRINTER MAINTENANCE LOG (newest first, ' + log.length + ' entries) ===');
+    lines.push('Categories in use: ' + (data.settings.issueCategories || []).join(', '));
+    lines.push('Entries with an [L#] token are issues and notes whose category you can change via propose_log_categories.');
+    lines.push('A category of "Unknown" means it was captured in a hurry and has not been sorted yet. Multi-line notes are shown with ⏎ where the line breaks are.');
+    const flat = t => String(t || '').replace(/\s*\r?\n+\s*/g, ' ⏎ ').replace(/[ \t]{2,}/g, ' ').trim();
     log.slice(0, isMaint ? 250 : 60).forEach(e=>{
       const pr = data.printers[e.printerId];
-      const bits = [new Date(e.timestamp).toLocaleDateString(), (pr ? pr.name : '(removed)'), e.type];
-      if(e.category && e.category !== 'Unknown') bits.push(e.category);
+      const bits = [];
+      if(e.type === 'issue' || e.type === 'note'){
+        const ref = 'L' + (++refN);
+        askAiRefMap[ref] = { type:'log', id:e.id };
+        bits.push(ref);
+      }
+      bits.push(new Date(e.timestamp).toLocaleDateString(), (pr ? pr.name : '(removed)'), e.type);
+      if(e.type === 'issue' || e.type === 'note') bits.push('category: ' + (e.category || 'none'));
       if(e.type === 'issue') bits.push(e.resolved ? 'RESOLVED' : 'OPEN');
-      let line = '- ' + bits.join(' | ') + ': ' + (e.text || '');
-      if(e.fixText) line += '  [what fixed it: ' + e.fixText + ']';
+      let text = flat(e.text);
+      if(text.length > 900) text = text.slice(0, 900) + '…';
+      let line = '- ' + bits.join(' | ') + ': ' + text;
+      if(e.fixText) line += '  [what fixed it: ' + flat(e.fixText) + ']';
       lines.push(line);
     });
     lines.push('');
@@ -6551,7 +6686,9 @@ const ASKAI_INSTRUCTIONS = [
   "Keep answers tight. Use short markdown: bullet lists, and tables when comparing numbers.",
   "The snapshot is scoped to the page the user is on. If it only contains a one-line summary for the area they're asking about, say which tab they should open so you can see the full list.",
   "",
-  "TAKING ACTION: when the user asks you to change target stock, low-stock thresholds, the favorite flag, or on-order status — or clearly wants you to act, not just advise — call the propose_inventory_changes tool with the specific items, using the exact [F#]/[P#] reference tokens from the snapshot. favorite and on-order are filament-only. Still explain your reasoning in a short text reply. The user reviews and approves every change before anything is applied, so propose the full set you'd recommend. Only call the tool when the snapshot actually contains the full item list (not just a summary), and never call it just to illustrate a point."
+  "TAKING ACTION: when the user asks you to change target stock, low-stock thresholds, the favorite flag, or on-order status — or clearly wants you to act, not just advise — call the propose_inventory_changes tool with the specific items, using the exact [F#]/[P#] reference tokens from the snapshot. favorite and on-order are filament-only. Still explain your reasoning in a short text reply. The user reviews and approves every change before anything is applied, so propose the full set you'd recommend. Only call the tool when the snapshot actually contains the full item list (not just a summary), and never call it just to illustrate a point.",
+  "",
+  "CATEGORIZING THE PRINTER LOG: the user often logs an issue or a note fast and leaves the category on \"Unknown\" for you to sort out later. When they ask you to categorize, re-categorize, tidy up, or file their printer notes, call propose_log_categories with the [L#] tokens from the maintenance log. Read the note text and pick the best fit from the category list in the snapshot. Only invent a new category when a real pattern in their notes has nothing close in the list — keep new names short and in the same style as the existing ones, and say in your text reply that it's a new one. Skip entries that are already categorized sensibly, and say briefly why for anything genuinely too vague to file. The [L#] tokens only exist when the maintenance log is in the snapshot (3D Printers → Printers, or Reports)."
 ].join('\n');
 
 const ASKAI_TOOL = {
@@ -6572,6 +6709,30 @@ const ASKAI_TOOL = {
             reason: { type: 'string', description: 'A few words on why, shown next to the change.' }
           },
           required: ['ref','field','value']
+        }
+      }
+    },
+    required: ['changes']
+  }
+};
+
+const ASKAI_LOG_TOOL = {
+  name: 'propose_log_categories',
+  description: "Set or change the category on printer maintenance log entries (issues and notes) for the user to review and apply. Use the [L#] reference tokens from the maintenance log in the snapshot. You may propose a category name that isn't in their list yet — it gets added to the list when they apply that change. You cannot edit the note text, resolve or reopen issues, change printer status, or delete anything.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      changes: {
+        type: 'array',
+        description: 'One entry per log entry you want to categorize.',
+        items: {
+          type: 'object',
+          properties: {
+            ref: { type: 'string', description: 'The [L#] log reference token from the snapshot.' },
+            category: { type: 'string', description: "The category to set. Prefer an exact match from the category list in the snapshot; only propose a new short name when nothing existing fits." },
+            reason: { type: 'string', description: 'A few words on why, shown next to the change.' }
+          },
+          required: ['ref','category']
         }
       }
     },
@@ -6604,6 +6765,7 @@ function askAiQuickPrompts(){
       'Give me the boss bird’s-eye-view summary.',
       'What changed in the reports that actually matters?',
       act('Adjust my filament target stock based on real usage, not just low-stock levels.'),
+      act('Categorize my Unknown printer notes.'),
       'What am I at risk of running out of in the next 30 days?',
       'What are we wasting money on?',
       'What are the biggest inventory risks right now?',
@@ -6614,6 +6776,9 @@ function askAiQuickPrompts(){
 
   if(id === 'maintenance'){
     return [
+      act('Categorize my Unknown printer notes.'),
+      act('Read every note in the log and file it under the right category.'),
+      act('Are my categories missing anything? Suggest new ones and apply them to the notes that need them.'),
       'What do I need to do to fix the printers that are down?',
       'What maintenance needs doing, and on which printer?',
       'What is the most urgent problem here?',
@@ -6754,7 +6919,7 @@ function renderAskAiThread(scroll){
   const prevScroll = body.scrollTop;
   if(!askAiThread.length){
     body.innerHTML = '<div class="ai-empty">Ask anything about <strong>' + escapeHtml(askAiContextLabel()) +
-      '</strong>. Your question goes to Claude with a snapshot of your filament, parts and printers. For target stock, thresholds, favorites and on-order status it can also suggest changes for you to review and apply.</div>';
+      '</strong>. Your question goes to Claude with a snapshot of your filament, parts and printers. It can also suggest changes for you to review and apply — target stock, thresholds, favorites, on-order status, and the category on printer log notes.</div>';
     return;
   }
   body.innerHTML = askAiThread.map((m, idx)=>{
@@ -6778,6 +6943,7 @@ function fieldLabel(f){
   return { targetStock:'target stock', lowStockThreshold:'low-stock threshold', favorite:'favorite', ordered:'on order' }[f] || f;
 }
 function renderAskAiProposal(prop, idx){
+  const isLog = prop.kind === 'logcat';
   const rows = prop.changes.map((c, i)=>{
     if(!c.valid){
       return '<div class="ai-proposal-row invalid"><input type="checkbox" disabled>' +
@@ -6789,7 +6955,7 @@ function renderAskAiProposal(prop, idx){
     return '<div class="ai-proposal-row">' +
       '<input type="checkbox" id="aiChg_' + idx + '_' + i + '"' + checkedAttr + (pending ? '' : ' disabled') + '>' +
       '<div><span class="ai-chg-item">' + escapeHtml(c.itemLabel) + '</span> — ' +
-      '<span class="ai-chg-detail">' + escapeHtml(fieldLabel(c.field)) + ' ' +
+      '<span class="ai-chg-detail">' + escapeHtml(isLog ? 'category' : fieldLabel(c.field)) + ' ' +
       '<span class="ai-chg-old">' + escapeHtml(String(c.oldDisplay)) + '</span> → ' +
       '<span class="ai-chg-new">' + escapeHtml(String(c.newDisplay)) + '</span></span>' +
       (c.reason ? '<span class="ai-chg-reason">' + escapeHtml(c.reason) + '</span>' : '') +
@@ -6813,7 +6979,52 @@ function renderAskAiProposal(prop, idx){
   }
 
   const cls = 'ai-proposal' + (prop.status === 'applied' ? ' done' : '') + (prop.status === 'dismissed' ? ' done dismissed' : '');
-  return '<div class="' + cls + '"><h4>Suggested changes</h4>' + rows + footer + '</div>';
+  return '<div class="' + cls + '"><h4>' + (isLog ? 'Suggested categories' : 'Suggested changes') + '</h4>' + rows + footer + '</div>';
+}
+function resolveAskAiLogChange(c){
+  const out = { ref: c.ref, category: String(c.category || '').trim(), reason: (c.reason || '').trim(), valid: false, error: '' };
+  const map = askAiRefMap[String(c.ref || '').trim()];
+  if(!map || map.type !== 'log'){ out.error = 'couldn’t match ' + (c.ref || '(no ref)') + ' to a log entry'; return out; }
+  const entry = (data.printerLog || []).find(l=>l.id === map.id);
+  if(!entry){ out.error = 'that log entry no longer exists'; return out; }
+  out.itemId = entry.id;
+  const pr = data.printers[entry.printerId];
+  out.itemLabel = (pr ? pr.name : '(removed printer)') + ': ' +
+    truncateWords(String(entry.text || '').replace(/\s+/g, ' ').trim() || '(no text)', 9);
+  if(entry.type !== 'issue' && entry.type !== 'note'){ out.error = 'only issues and notes have a category'; return out; }
+  if(!out.category){ out.error = 'no category given'; return out; }
+  if(out.category.length > 40){ out.error = 'that category name is too long'; return out; }
+  // Match an existing category case-insensitively so the AI can't fork "Clog / Extrusion" into a near-duplicate.
+  const existing = (data.settings.issueCategories || []).find(x=>String(x).toLowerCase() === out.category.toLowerCase());
+  if(existing) out.category = existing; else out.isNewCategory = true;
+  if((entry.category || '') === out.category){ out.error = 'already set to that'; return out; }
+  out.oldDisplay = entry.category || 'none';
+  out.newDisplay = out.category + (out.isNewCategory ? ' (new category)' : '');
+  out.valid = true;
+  return out;
+}
+function applyAskAiLogProposal(prop, picked){
+  captureUndo();
+  const applied = [];
+  let addedCats = 0;
+  picked.forEach(c=>{
+    const entry = (data.printerLog || []).find(l=>l.id === c.itemId);
+    if(!entry) return;
+    if(c.isNewCategory && !(data.settings.issueCategories || []).some(x=>String(x).toLowerCase() === c.category.toLowerCase())){
+      data.settings.issueCategories.push(c.category);
+      addedCats++;
+    }
+    entry.category = c.category;
+    applied.push(c.ref);
+  });
+  prop.status = 'applied';
+  prop.appliedRefs = applied;
+  saveData();
+  renderAll();
+  renderSettingsLists();
+  refreshAllDropdownSources();
+  showUndoBar('AI categorized ' + applied.length + ' log entr' + (applied.length !== 1 ? 'ies' : 'y') +
+    (addedCats ? (', added ' + addedCats + ' new categor' + (addedCats !== 1 ? 'ies' : 'y')) : ''));
 }
 function resolveAskAiChange(c){
   const out = { ref: c.ref, field: c.field, value: c.value, reason: (c.reason || '').trim(), valid: false, error: '' };
@@ -6850,8 +7061,9 @@ function proposalOutcomeText(prop){
   if(prop.status === 'dismissed') return 'The user dismissed the proposal. No changes were made.';
   const applied = prop.changes.filter(c=>(prop.appliedRefs || []).includes(c.ref));
   const skipped = prop.changes.filter(c=>c.valid && !(prop.appliedRefs || []).includes(c.ref));
-  let t = 'The user applied: ' + (applied.map(c=>c.itemLabel + ' ' + fieldLabel(c.field) + ' → ' + c.newDisplay).join('; ') || '(none)') + '.';
-  if(skipped.length) t += ' They skipped: ' + skipped.map(c=>c.itemLabel + ' ' + fieldLabel(c.field)).join('; ') + '.';
+  const label = c => prop.kind === 'logcat' ? (c.ref + ' ' + c.itemLabel) : (c.itemLabel + ' ' + fieldLabel(c.field));
+  let t = 'The user applied: ' + (applied.map(c=>label(c) + ' → ' + c.newDisplay).join('; ') || '(none)') + '.';
+  if(skipped.length) t += ' They skipped: ' + skipped.map(label).join('; ') + '.';
   return t;
 }
 function applyAskAiProposal(idx){
@@ -6865,6 +7077,13 @@ function applyAskAiProposal(idx){
     if(box && box.checked) picked.push(c);
   });
   if(!picked.length){ toast('Tick at least one change to apply'); return; }
+
+  if(prop.kind === 'logcat'){
+    applyAskAiLogProposal(prop, picked);
+    persistCurrentChat();
+    renderAskAiThread('keep');
+    return;
+  }
 
   captureUndo();
   const applied = [];
@@ -6922,7 +7141,7 @@ function buildAskAiApiMessages(){
     if(m.proposal){
       const content = [];
       if(m.content && m.content.trim()) content.push({ type:'text', text:m.content });
-      content.push({ type:'tool_use', id:m.proposal.toolUseId, name:'propose_inventory_changes', input:{ changes:m.proposal.rawChanges } });
+      content.push({ type:'tool_use', id:m.proposal.toolUseId, name:(m.proposal.toolName || 'propose_inventory_changes'), input:{ changes:m.proposal.rawChanges } });
       msgs.push({ role:'assistant', content });
       pendingToolResult = { type:'tool_result', tool_use_id:m.proposal.toolUseId, content: proposalOutcomeText(m.proposal) };
     } else {
@@ -6975,7 +7194,7 @@ async function sendAskAi(){
         max_tokens: 4000,
         stream: true,
         thinking: { type: 'disabled' },
-        tools: [ ASKAI_TOOL ],
+        tools: [ ASKAI_TOOL, ASKAI_LOG_TOOL ],
         system: askAiSystemPrompt(),
         messages: apiMessages
       })
@@ -7001,8 +7220,9 @@ async function sendAskAi(){
         usage.cw = u.cache_creation_input_tokens || 0;
         usage.cr = u.cache_read_input_tokens || 0;
       } else if(payload.type === 'content_block_start' && payload.content_block && payload.content_block.type === 'tool_use'){
-        toolUse = { id: payload.content_block.id, json: '' };
-        live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span><div class="ai-chg-reason">preparing suggested changes…</div>';
+        toolUse = { id: payload.content_block.id, name: payload.content_block.name || 'propose_inventory_changes', json: '' };
+        live.innerHTML = aiMarkdown(answer) + '<span class="ai-cursor"></span><div class="ai-chg-reason">' +
+          (toolUse.name === 'propose_log_categories' ? 'sorting categories…' : 'preparing suggested changes…') + '</div>';
         askAiApplyScroll();
       } else if(payload.type === 'content_block_delta' && payload.delta && payload.delta.type === 'text_delta'){
         answer += payload.delta.text;
@@ -7039,9 +7259,11 @@ async function sendAskAi(){
         const parsed = JSON.parse(toolUse.json || '{}');
         if(Array.isArray(parsed.changes)) raw = parsed.changes;
       }catch(e){}
-      const resolved = raw.map(resolveAskAiChange);
+      const isLog = toolUse.name === 'propose_log_categories';
+      const resolved = raw.map(isLog ? resolveAskAiLogChange : resolveAskAiChange);
       if(resolved.length){
-        proposal = { toolUseId: toolUse.id, rawChanges: raw, changes: resolved, status: 'pending', appliedRefs: [] };
+        proposal = { toolUseId: toolUse.id, toolName: toolUse.name, kind: isLog ? 'logcat' : 'inventory',
+          rawChanges: raw, changes: resolved, status: 'pending', appliedRefs: [] };
       }
     }
 

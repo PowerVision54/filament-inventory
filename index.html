@@ -1336,7 +1336,7 @@
       <h2>Database Health</h2>
       <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How much data this browser is holding, how many rows a cold load pulls from Turso, and how the last few syncs have performed — all calculated from the copy already in memory, with no extra requests.</p>
       <div class="stat-strip" style="flex-wrap:wrap;margin-bottom:14px;">
-        <div class="stat-item"><div class="num" id="dbHealthNum" style="font-size:16px;">—</div><div class="label">Health</div></div>
+        <div class="stat-item"><div class="num" id="dbHealthNum" style="font-size:16px;">—</div><div class="label" id="dbHealthWhy">Health</div></div>
         <div class="stat-item"><div class="num" id="dbSizeNum">—</div><div class="label">Loaded data</div></div>
         <div class="stat-item"><div class="num" id="dbRowsNum">—</div><div class="label">Rows per load</div></div>
         <div class="stat-item"><div class="num" id="dbSyncNum">—</div><div class="label">Avg sync time</div></div>
@@ -1348,7 +1348,7 @@
       <p class="footer-note" style="margin:8px 0 0;">Sizes are of the in-memory copy, which is what gets cached in this browser and what a cold load has to rebuild. Saving a change only writes the rows that actually changed, so this figure does not affect how long a scan takes to sync.</p>
       <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Rows in Turso</h3>
       <div id="dbRecordCountsList"></div>
-      <p class="footer-note" style="margin:8px 0 0;">Opening the app reads every one of these rows. Turso's plan limits are counted in rows read and written, so this total — not the kilobytes above — is the number that maps to your quota. The browser cache gauge tracks the one hard ceiling left: this browser stores two full copies of the data (the working cache and the last-synced base used to merge changes from other devices) in a space of roughly 5 MB.</p>
+      <p class="footer-note" style="margin:8px 0 0;">Opening the app reads every one of these rows. Turso's plan limits are counted in rows read and written, so this total — not the kilobytes above — is the number that maps to your quota. The browser cache figure is this browser's local copy measured against the quota it reports: two full copies of the data (the working cache, plus the last-synced base used to merge changes from other devices) alongside Ask AI chat and usage history. Chromium browsers allow gigabytes here; Safari caps it near 5 MB, which is the figure shown with an asterisk when a browser won't report its own limit.</p>
     </section>
   </div>
 
@@ -2048,11 +2048,44 @@ function loadLocalCache(){
   }catch(e){ console.error('Failed to load local cache', e); }
   return null;
 }
+/* The working cache is what recovers unsynced changes after a crash or an
+   offline stretch, so a failed write here is not cosmetic — it silently costs
+   you that safety net. localStorage gives the origin ~5 MB and this app is not
+   its only tenant (the merge base is a second full copy of the data, and Ask AI
+   keeps chat and usage history), so when it fills up, drop the things that can
+   be rebuilt and keep the cache. */
+let localCacheQuotaWarned = false;
 function saveLocalCache(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const payload = JSON.stringify(data);
+  const write = ()=>{
+    localStorage.setItem(STORAGE_KEY, payload);
     localStorage.setItem(DIRTY_FLAG_KEY, ghDirty ? '1' : '0');
-  }catch(e){ console.error('Failed to save local cache', e); }
+  };
+  try{ write(); localCacheQuotaWarned = false; return true; }
+  catch(e){
+    // Reclaim in order of how little it costs to lose. The merge base stays in
+    // memory for this session either way (setGhBase keeps its own copy), so
+    // removing the stored one only degrades merges after a reload. Sync timings
+    // and AI usage history are pure telemetry. Chat history is the user's, so
+    // it is never touched automatically — we ask instead.
+    for(const reclaim of [
+      ()=>localStorage.removeItem(BASE_KEY),
+      ()=>{ localStorage.removeItem(SYNC_PERF_KEY); localStorage.removeItem(ASKAI_USAGE_KEY); }
+    ]){
+      try{ reclaim(); write(); }
+      catch(again){ continue; }
+      console.warn('Local cache was out of space; dropped recoverable data to make room');
+      return true;
+    }
+    console.error('Failed to save local cache', e);
+    if(!localCacheQuotaWarned){
+      localCacheQuotaWarned = true;
+      toast("This browser is out of local storage, so your changes can't be cached here. " +
+            "They still sync to Turso, but unsynced edits would be lost if the tab closed offline. " +
+            "Clearing Ask AI chat history in Settings frees the most space.", 12000);
+    }
+    return false;
+  }
 }
 function localCacheWasDirty(){
   try{ return localStorage.getItem(DIRTY_FLAG_KEY) === '1'; }catch(e){ return false; }
@@ -4342,17 +4375,40 @@ function formatBytes(bytes){
   if(bytes < 1024) return bytes + ' B';
   const kb = bytes / 1024;
   if(kb < 1024) return kb.toFixed(kb < 10 ? 1 : 0) + ' KB';
-  return (kb / 1024).toFixed(2) + ' MB';
+  const mb = kb / 1024;
+  // Storage quotas come back in the gigabytes, so don't render them as "1610.32 MB".
+  if(mb < 1024) return mb.toFixed(mb < 10 ? 2 : 0) + ' MB';
+  return (mb / 1024).toFixed(mb / 1024 < 10 ? 1 : 0) + ' GB';
 }
+// Neutral words, because the tier can be set by any of the signals below —
+// calling a slow sync "Growing" pointed at the wrong thing entirely.
 const DB_HEALTH_TIERS = [
   { emoji:'\u{1F7E2}', label:'Excellent' },
   { emoji:'\u{1F7E1}', label:'Good' },
-  { emoji:'\u{1F7E0}', label:'Growing' },
-  { emoji:'\u{1F534}', label:'Large' }
+  { emoji:'\u{1F7E0}', label:'Watch' },
+  { emoji:'\u{1F534}', label:'Attention' }
 ];
-// Browsers give an origin roughly 5 MB of localStorage and count it in UTF-16
-// code units, so measure the same way rather than in UTF-8 bytes.
-const LOCAL_STORAGE_BUDGET = 5 * 1024 * 1024;
+/* How much room this browser really gives the app.
+
+   The familiar "5 MB of localStorage" is only true on Safari, and roughly true
+   on Firefox. Chromium-based browsers (Chrome, Edge, Brave) moved localStorage
+   into the shared per-origin storage quota years ago, which is disk-derived and
+   routinely gigabytes — measured at ~49 MB of characters in testing before
+   QuotaExceededError, on a machine with plenty of free disk. Quoting 5 MB there
+   turns a 1% figure into an alarming 26% one, so ask the browser instead and
+   keep 5 MB only as the floor for browsers that will not say. */
+const LOCAL_STORAGE_FLOOR = 5 * 1024 * 1024;
+let storageEstimate = null; // { usage, quota } straight from the browser
+function refreshStorageEstimate(){
+  if(storageEstimate || !navigator.storage || !navigator.storage.estimate) return;
+  navigator.storage.estimate().then(est=>{
+    if(!est || !est.quota) return;
+    storageEstimate = { usage: est.usage || 0, quota: est.quota };
+    renderDbHealth(); // first real figure arrived — repaint once, never again
+  }).catch(()=>{});
+}
+// localStorage is counted in UTF-16 code units, so measure it the same way
+// rather than in UTF-8 bytes.
 function localStorageBytes(){
   try{
     let chars = 0;
@@ -4406,32 +4462,48 @@ function computeDbHealth(){
   const avgSyncMs = averageSyncDuration();
   const recordCounts = rowsPerLoad();
   const totalRows = recordCounts.reduce((n,r)=>n+r.count, 0);
+  refreshStorageEstimate();
   const cacheBytes = localStorageBytes();
-  const cachePct = cacheBytes === null ? 0 : (cacheBytes / LOCAL_STORAGE_BUDGET * 100);
+  // Prefer the browser's own quota; fall back to the conservative floor.
+  const cacheBudget = storageEstimate ? storageEstimate.quota : LOCAL_STORAGE_FLOOR;
+  const cacheBudgetIsReal = !!storageEstimate;
+  const cachePct = cacheBytes === null ? 0 : (cacheBytes / cacheBudget * 100);
 
   // Worst signal wins — plenty of headroom doesn't matter if syncing is slow,
   // and vice versa. The size tier tracks the browser cache rather than an
   // absolute byte count, because that quota is the only hard ceiling left: a
   // delta save costs the same whether `data` is 100 KB or 3 MB.
   const cacheTier = cacheBytes === null ? 0 : cachePct < 40 ? 0 : cachePct < 60 ? 1 : cachePct < 80 ? 2 : 3;
-  const syncTier = avgSyncMs === null ? 0 : avgSyncMs < 500 ? 0 : avgSyncMs < 1000 ? 1 : avgSyncMs < 2000 ? 2 : 3;
+  // Calibrated for a hosted database reached over HTTP, which is what this is:
+  // a save is two round trips to Turso, so a second of total latency is normal
+  // for a shared free-tier instance in another region, not a warning sign.
+  const syncTier = avgSyncMs === null ? 0 : avgSyncMs < 1500 ? 0 : avgSyncMs < 2500 ? 1 : avgSyncMs < 4000 ? 2 : 3;
   const sectionTier = largestPct >= 70 ? 1 : 0;
-  const tier = Math.max(cacheTier, syncTier, sectionTier);
+  const drivers = [
+    { tier: cacheTier, why: 'browser storage headroom' },
+    { tier: syncTier, why: 'sync speed' },
+    { tier: sectionTier, why: 'one lopsided section' }
+  ];
+  const tier = Math.max(...drivers.map(d=>d.tier));
+  // Name what actually set the rating, so an amber light is never a mystery.
+  const reason = tier === 0 ? 'nothing needs attention' : drivers.filter(d=>d.tier === tier).map(d=>d.why).join(' + ');
 
   return { totalBytes, sections, largest, largestPct, avgSyncMs, recordCounts, totalRows,
-           cacheBytes, cachePct, health: DB_HEALTH_TIERS[tier] };
+           cacheBytes, cachePct, cacheBudget, cacheBudgetIsReal,
+           health: DB_HEALTH_TIERS[tier], healthReason: reason };
 }
 function renderDbHealth(){
   const sizeEl = document.getElementById('dbSizeNum');
   if(!sizeEl || !data) return;
   const h = computeDbHealth();
   document.getElementById('dbHealthNum').textContent = h.health.emoji + ' ' + h.health.label;
+  document.getElementById('dbHealthWhy').textContent = 'Health — ' + h.healthReason;
   sizeEl.textContent = formatBytes(h.totalBytes);
   document.getElementById('dbRowsNum').textContent = h.totalRows.toLocaleString();
   document.getElementById('dbSyncNum').textContent = h.avgSyncMs === null ? '—' : (h.avgSyncMs/1000).toFixed(2) + ' sec';
   document.getElementById('dbCacheNum').textContent = h.cacheBytes === null
     ? '—'
-    : formatBytes(h.cacheBytes) + ' of 5 MB';
+    : formatBytes(h.cacheBytes) + ' of ' + formatBytes(h.cacheBudget) + (h.cacheBudgetIsReal ? '' : '*');
   document.getElementById('dbLargestNum').textContent = h.largest ? h.largest.label + ' (' + h.largestPct.toFixed(0) + '%)' : '—';
 
   const maxBytes = Math.max(1, ...h.sections.map(s=>s.bytes));

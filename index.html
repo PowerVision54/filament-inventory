@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://api.github.com https://api.anthropic.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://*.turso.io https://api.anthropic.com; base-uri 'none'; form-action 'none'">
 <title>3D Printer Filament Inventory System</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23114735'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23E7EFEA' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23E7EFEA'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -837,7 +837,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.25</div>
+    <div class="sub">V0.26</div>
   </div>
 </header>
 
@@ -1260,31 +1260,31 @@
 
   <div class="tab-panel" data-tab="settings">
     <section>
-      <h2>GitHub Sync</h2>
+      <h2>Turso Sync</h2>
       <p class="footer-note" style="margin-top:0;margin-bottom:10px;" id="ghSyncStatusText">Not connected.</p>
       <div class="footer-row">
         <button class="btn" onclick="manualGhSync()">Sync now</button>
-        <button class="btn" onclick="openGhConnectionModal()">Change GitHub connection</button>
+        <button class="btn" onclick="openGhConnectionModal()">Change Turso connection</button>
       </div>
     </section>
     <section>
       <h2>Share access</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Generates a link with this connection already filled in, so someone new can open it and land straight in the app instead of typing owner/repo/path/token by hand. Opening the link fills the connection in automatically; on a browser that isn't connected to anything yet, it connects right away with no extra click.</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Generates a link with the Turso database URL and token already filled in. Opening it on a browser that is not connected yet connects automatically.</p>
       <div class="footer-row">
-        <button class="btn" onclick="copyGhShareLink()">Copy share link</button>
+        <button class="btn" onclick="copyGhShareLink()">Copy Turso share link</button>
       </div>
-      <p class="footer-note" style="margin-bottom:0;">The link carries the token in plain text — treat it like a password. Prefer minting a separate token per person (Change GitHub connection) so any one link can be revoked later without breaking everyone else's.</p>
+      <p class="footer-note" style="margin-bottom:0;">The Base64-encoded link still carries the token as a secret — treat it like a password. Prefer a separate database-scoped token per person so access can be revoked independently.</p>
     </section>
     <section>
       <h2>Ask AI (Claude)</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Powers the "Ask AI" button in the bottom-right corner. Get a key from <span style="font-family:'IBM Plex Mono',monospace;">console.anthropic.com</span> &rarr; API Keys. The key is stored only in this browser and is <strong>never</strong> synced to GitHub or shared — each device needs its own. Usage is billed to your Anthropic account (a typical question costs well under a cent).</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Powers the "Ask AI" button in the bottom-right corner. Get a key from <span style="font-family:'IBM Plex Mono',monospace;">console.anthropic.com</span> &rarr; API Keys. The key is stored only in this browser and is <strong>never</strong> synced to Turso or shared — each device needs its own. Usage is billed to your Anthropic account (a typical question costs well under a cent).</p>
       <div id="askAiKeyState"></div>
       <div class="field" style="margin-top:12px;">
         <label>Model</label>
         <select id="askAiModelSelect" onchange="saveAskAiModel()">
           <option value="claude-sonnet-5">Claude Sonnet 5 — recommended</option>
           <option value="claude-haiku-4-5">Claude Haiku 4.5 — faster, cheaper</option>
-          <option value="claude-opus-4-8">Claude Opus 4.8 — most capable, pricier</option>
+          <option value="claude-opus-5">Claude Opus 5 — most capable, pricier</option>
         </select>
       </div>
       <p class="footer-note" style="margin-bottom:0;">For privacy: your question and an inventory snapshot are sent to Anthropic's API when you ask. Anthropic does not train on API data.</p>
@@ -1316,7 +1316,7 @@
         <button class="btn" onclick="document.getElementById('importFile').click()">Import backup</button>
         <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
       </div>
-      <p class="footer-note">The shared copy of this data lives in your private GitHub repo (see GitHub Sync above). This browser also keeps a local backup copy in case GitHub is briefly unreachable — export a JSON backup periodically for extra safety.</p>
+      <p class="footer-note">The shared copy lives in normalized SQL tables in Turso. This browser also keeps a local fallback copy in case Turso is briefly unreachable — export a JSON backup periodically for extra safety.</p>
       <details style="margin-top:14px;">
         <summary style="cursor:pointer;color:var(--text-muted);font-size:12.5px;">Danger zone</summary>
         <div class="footer-row" style="margin-top:10px;">
@@ -1334,18 +1334,21 @@
     </section>
     <section>
       <h2>Database Health</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How big the shared data file is and how the last few syncs have performed — calculated entirely from what's already loaded, no extra requests. This is about keeping the app itself fast, not about GitHub's file size limits (which are far higher than this app should ever need).</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How much data this browser is holding, how many rows a cold load pulls from Turso, and how the last few syncs have performed — all calculated from the copy already in memory, with no extra requests.</p>
       <div class="stat-strip" style="flex-wrap:wrap;margin-bottom:14px;">
         <div class="stat-item"><div class="num" id="dbHealthNum" style="font-size:16px;">—</div><div class="label">Health</div></div>
-        <div class="stat-item"><div class="num" id="dbSizeNum">—</div><div class="label">Database size</div></div>
-        <div class="stat-item"><div class="num" id="dbTargetNum" style="font-size:16px;">&lt; 2 MB</div><div class="label">Design target</div></div>
+        <div class="stat-item"><div class="num" id="dbSizeNum">—</div><div class="label">Loaded data</div></div>
+        <div class="stat-item"><div class="num" id="dbRowsNum">—</div><div class="label">Rows per load</div></div>
         <div class="stat-item"><div class="num" id="dbSyncNum">—</div><div class="label">Avg sync time</div></div>
+        <div class="stat-item"><div class="num" id="dbCacheNum" style="font-size:13px;">—</div><div class="label">Browser cache used</div></div>
         <div class="stat-item"><div class="num" id="dbLargestNum" style="font-size:13px;">—</div><div class="label">Largest section</div></div>
       </div>
-      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">Database breakdown</h3>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">What's using the space</h3>
       <div id="dbBreakdownList"></div>
-      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Record counts</h3>
+      <p class="footer-note" style="margin:8px 0 0;">Sizes are of the in-memory copy, which is what gets cached in this browser and what a cold load has to rebuild. Saving a change only writes the rows that actually changed, so this figure does not affect how long a scan takes to sync.</p>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Rows in Turso</h3>
       <div id="dbRecordCountsList"></div>
+      <p class="footer-note" style="margin:8px 0 0;">Opening the app reads every one of these rows. Turso's plan limits are counted in rows read and written, so this total — not the kilobytes above — is the number that maps to your quota. The browser cache gauge tracks the one hard ceiling left: this browser stores two full copies of the data (the working cache and the last-synced base used to merge changes from other devices) in a space of roughly 5 MB.</p>
     </section>
   </div>
 
@@ -1616,7 +1619,7 @@
   <button onclick="refreshFromGithub()">Refresh</button>
 </div>
 
-<div id="syncIndicator" onclick="manualGhSync()" title="Click to check GitHub for updates">
+<div id="syncIndicator" onclick="manualGhSync()" title="Click to check Turso for updates">
   <span class="sync-dot" id="syncIndicatorDot"></span>
   <span id="syncIndicatorText">Not connected</span>
 </div>
@@ -1688,13 +1691,13 @@
 <div class="gh-gate" id="ghGateScreen">
   <div class="gh-gate-card">
     <h1>3D PRINTER FILAMENT INVENTORY</h1>
-    <div class="gh-gate-sub">Shared data lives in a private GitHub repo — no server, no login system.</div>
+    <div class="gh-gate-sub">Shared data lives in your Turso SQL database. Credentials stay in this browser.</div>
     <div id="ghGateBody"></div>
   </div>
 </div>
 
 <script>
-const STORAGE_KEY = 'filamentLog_v1';
+const STORAGE_KEY = 'filamentLog_turso_v1';
 let currentMode = 'out';
 let currentMaterialFilterFamily = '';
 let selectedSkuIds = new Set();
@@ -1912,11 +1915,33 @@ function findPartByBarcode(code){
 }
 let data = null;
 
+function dedupeBarcodes(records){
+  const owner = new Map();
+  Object.values(records || {})
+    .slice()
+    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0) || String(a.id).localeCompare(String(b.id)))
+    .forEach(rec=>{
+      if(!Array.isArray(rec.barcodes)) return;
+      const kept = [];
+      rec.barcodes.forEach(code=>{
+        if(code === null || code === undefined || code === '') return;
+        const key = String(code);
+        if(owner.has(key)) return;
+        owner.set(key, rec.id);
+        kept.push(key);
+      });
+      rec.barcodes = kept;
+    });
+}
 function ensureSettingsDefaults(d){
   if(!d.settings) d.settings = {};
-  if(d.settings.defaultThreshold === undefined) d.settings.defaultThreshold = 2;
+  // SQL NULL is how Turso represents an older JSON property that did not
+  // exist. Treat null and undefined alike when backfilling legacy records so
+  // a SQL round trip cannot suppress a default that the JSON loader applied.
+  if(d.settings.defaultThreshold === undefined || d.settings.defaultThreshold === null || !Number.isFinite(Number(d.settings.defaultThreshold))) d.settings.defaultThreshold = 2;
+  else d.settings.defaultThreshold = Number(d.settings.defaultThreshold);
   // Ask AI "extra context" lives here (in the synced file) rather than in
-  // localStorage, so everyone on the same repo shares one set of notes. The
+  // localStorage, so everyone on the same database shares one set of notes. The
   // timestamp is what the three-way merge uses to pick a winner when two
   // people edit it between syncs.
   if(typeof d.settings.aiExtraContext !== 'string') d.settings.aiExtraContext = '';
@@ -1943,39 +1968,39 @@ function ensureSettingsDefaults(d){
   if(!d.settings.partCategories) d.settings.partCategories = DEFAULT_PART_CATEGORIES.slice();
   d.settings.partCategories.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
   Object.values(d.parts).forEach(p=>{
-    if(!p.barcodes) p.barcodes = [];
-    if(p.qty === undefined) p.qty = 0;
-    if(p.mpn === undefined) p.mpn = '';
-    if(p.category === undefined || p.category === '') p.category = 'Other';
-    if(p.models === undefined) p.models = '';
-    if(p.description === undefined) p.description = '';
-    if(p.notes === undefined) p.notes = '';
-    if(p.location === undefined) p.location = '';
-    if(p.purchaseUrl === undefined) p.purchaseUrl = '';
-    if(p.lowStockThreshold === undefined) p.lowStockThreshold = 1;
-    if(p.targetStock === undefined) p.targetStock = Math.max(1, (p.lowStockThreshold||0) * 2);
+    if(!Array.isArray(p.barcodes)) p.barcodes = [];
+    if(p.qty === undefined || p.qty === null) p.qty = 0;
+    if(p.mpn === undefined || p.mpn === null) p.mpn = '';
+    if(p.category === undefined || p.category === null || p.category === '') p.category = 'Other';
+    if(p.models === undefined || p.models === null) p.models = '';
+    if(p.description === undefined || p.description === null) p.description = '';
+    if(p.notes === undefined || p.notes === null) p.notes = '';
+    if(p.location === undefined || p.location === null) p.location = '';
+    if(p.purchaseUrl === undefined || p.purchaseUrl === null) p.purchaseUrl = '';
+    if(p.lowStockThreshold === undefined || p.lowStockThreshold === null) p.lowStockThreshold = 1;
+    if(p.targetStock === undefined || p.targetStock === null) p.targetStock = Math.max(1, (p.lowStockThreshold||0) * 2);
   });
   Object.values(d.skus).forEach(sku=>{
-    if(!sku.barcodes){
+    if(!Array.isArray(sku.barcodes)){
       sku.barcodes = sku.barcode ? [sku.barcode] : [];
     }
-    if(sku.weightPerBoxKg === undefined) sku.weightPerBoxKg = 1;
-    if(sku.purchaseUrl === undefined) sku.purchaseUrl = '';
-    if(sku.location === undefined) sku.location = '';
+    if(sku.weightPerBoxKg === undefined || sku.weightPerBoxKg === null) sku.weightPerBoxKg = 1;
+    if(sku.purchaseUrl === undefined || sku.purchaseUrl === null) sku.purchaseUrl = '';
+    if(sku.location === undefined || sku.location === null) sku.location = '';
     // One-time backfill for filaments that predate the target stock field —
     // same rule as the Edit modal's suggested default. Only fires once per
     // sku (it's a no-op once targetStock is actually set, including to 0
-    // by an explicit user edit — Math.max/undefined check below only looks
-    // at "was it ever set", not its value).
-    if(sku.targetStock === undefined){
+    // by an explicit user edit — the nullish check below only looks at "was
+    // it ever set", not its value).
+    if(sku.targetStock === undefined || sku.targetStock === null){
       sku.targetStock = sku.favorite ? 10 : Math.max(1, (sku.lowStockThreshold||0) * 2);
     }
   });
   Object.values(d.printers)
     .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
     .forEach((p,i)=>{
-      if(p.order === undefined) p.order = i;
-      if(p.group === undefined) p.group = '';
+      if(p.order === undefined || p.order === null) p.order = i;
+      if(p.group === undefined || p.group === null) p.group = '';
     });
   if(!d.settings.printerGroups) d.settings.printerGroups = [];
   const knownGroups = new Set(d.settings.printerGroups.map(g=>g.toLowerCase()));
@@ -1986,14 +2011,30 @@ function ensureSettingsDefaults(d){
     }
   });
   d.printerLog.forEach(e=>{
-    if((e.type==='issue' || e.type==='note') && e.category === undefined) e.category = 'Unknown';
+    if((e.type==='issue' || e.type==='note') && (e.category === undefined || e.category === null || e.category === '')) e.category = 'Unknown';
   });
+  // A barcode identifies exactly one record, and the SQL tables enforce that
+  // with a UNIQUE index. The UI blocks duplicates, but a three-way merge can
+  // still union two devices that each claimed the same code — left alone, the
+  // write would silently drop one side's row in Turso while this browser kept
+  // showing both, and the two copies would never agree again. Resolve it here
+  // instead: oldest record keeps the code, and scanning it stays predictable.
+  dedupeBarcodes(d.skus);
+  dedupeBarcodes(d.parts);
   // Keep the activity log from growing forever. Analytics only look back 90
   // days; keep ~13 months so year-over-year CSV exports still work, and the
-  // synced file stays far below GitHub's 1 MB contents-API limit.
+  // active working set remains quick to load and analyze.
   const eventCutoff = Date.now() - 400*86400000;
   d.events = d.events.filter(e=>(e.timestamp||0) >= eventCutoff);
   if(d.events.length > 20000) d.events = d.events.slice(-20000);
+}
+// Records are keyed by their first barcode when they have one — readable in
+// the database, and what the merge's "re-registered after deletion" check
+// relies on. But a record can keep that id after its barcode is unlinked, so
+// a fresh registration must not land on top of it and swallow its history.
+function newRecordId(records, barcode, prefix){
+  if(barcode && !records[barcode]) return barcode;
+  return uid(prefix);
 }
 function findSkuByBarcode(code){
   return Object.values(data.skus).find(s => (s.barcodes || []).includes(code));
@@ -2022,12 +2063,16 @@ function freshDataSkeleton(){
   return fresh;
 }
 
-/* ---------- GitHub Sync ---------- */
-const GH_CONFIG_KEY = 'gh_sync_config_v1';
+/* ---------- Turso SQL Sync ---------- */
+const GH_CONFIG_KEY = 'turso_sync_config_v1';
 let ghConfig = {};
 try{ ghConfig = JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || {}; }catch(e){ ghConfig = {}; }
 let ghSha = null;
 let ghDirty = false;
+// Bumped by every saveData(). A sync captures the counter as it starts, so
+// when it finishes it can tell whether `data` moved on underneath it and keep
+// the dirty flag set for those newer edits instead of declaring them synced.
+let ghDataVersion = 0;
 let ghDirtySince = null;
 let ghSaveTimer = null;
 let ghSaveInFlight = false;
@@ -2046,14 +2091,15 @@ function setGhBase(jsonStr){
 }
 
 function hasGhConfig(){
-  return !!(ghConfig.owner && ghConfig.repo && ghConfig.path && ghConfig.token);
+  return !!(ghConfig.url && ghConfig.token);
 }
 function saveGhConfigToStorage(){
   localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(ghConfig));
 }
 function ghApiUrl(){
-  const pathParts = ghConfig.path.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-  return 'https://api.github.com/repos/' + encodeURIComponent(ghConfig.owner) + '/' + encodeURIComponent(ghConfig.repo) + '/contents/' + pathParts;
+  let url = String(ghConfig.url || '').trim().replace(/\/+$/, '');
+  url = url.replace(/^libsql:\/\//i, 'https://').replace(/^turso:\/\//i, 'https://');
+  return url + '/v2/pipeline';
 }
 function utf8ToBase64(str){
   const bytes = new TextEncoder().encode(str);
@@ -2068,9 +2114,294 @@ function base64ToUtf8(b64){
   return new TextDecoder().decode(bytes);
 }
 
+const TURSO_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS setting_values (kind TEXT NOT NULL, value TEXT NOT NULL, color_hex TEXT, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(kind,value))`,
+  `CREATE TABLE IF NOT EXISTS skus (id TEXT PRIMARY KEY, brand TEXT NOT NULL, material TEXT NOT NULL, color_name TEXT NOT NULL, color_hex TEXT NOT NULL, box_count INTEGER NOT NULL DEFAULT 0, loose_count INTEGER NOT NULL DEFAULT 0, low_stock_threshold INTEGER NOT NULL DEFAULT 0, low_stock_disabled INTEGER NOT NULL DEFAULT 0, target_stock INTEGER, weight_per_box_kg REAL NOT NULL DEFAULT 1, purchase_url TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', favorite INTEGER NOT NULL DEFAULT 0, ordered INTEGER NOT NULL DEFAULT 0, ordered_at INTEGER, low_since INTEGER, last_verified_at INTEGER, verify_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS sku_barcodes (sku_id TEXT NOT NULL, barcode TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(sku_id,barcode), FOREIGN KEY(sku_id) REFERENCES skus(id) ON DELETE CASCADE)`,
+  `CREATE TABLE IF NOT EXISTS parts (id TEXT PRIMARY KEY, name TEXT NOT NULL, mpn TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT 'Other', models TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', purchase_url TEXT NOT NULL DEFAULT '', qty INTEGER NOT NULL DEFAULT 0, low_stock_threshold INTEGER NOT NULL DEFAULT 0, low_stock_disabled INTEGER NOT NULL DEFAULT 0, target_stock INTEGER, ordered INTEGER NOT NULL DEFAULT 0, ordered_at INTEGER, low_since INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS part_barcodes (part_id TEXT NOT NULL, barcode TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(part_id,barcode), FOREIGN KEY(part_id) REFERENCES parts(id) ON DELETE CASCADE)`,
+  `CREATE TABLE IF NOT EXISTS inventory_events (id TEXT PRIMARY KEY, sku_id TEXT, part_id TEXT, action TEXT NOT NULL, delta REAL NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT '', sample INTEGER NOT NULL DEFAULT 0, timestamp INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS inventory_events_timestamp_idx ON inventory_events(timestamp)`,
+  `CREATE TABLE IF NOT EXISTS scan_log (id TEXT PRIMARY KEY, timestamp INTEGER NOT NULL, sku_id TEXT, label TEXT NOT NULL DEFAULT '', delta REAL NOT NULL DEFAULT 0, action_label TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', reverse_box_count INTEGER NOT NULL DEFAULT 0, reverse_loose_count INTEGER NOT NULL DEFAULT 0, undone INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS printers (id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'operational', group_name TEXT NOT NULL DEFAULT '', sort_order INTEGER NOT NULL DEFAULT 0, last_serviced_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS printer_log (id TEXT PRIMARY KEY, printer_id TEXT NOT NULL, type TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', category TEXT, fix_text TEXT NOT NULL DEFAULT '', timestamp INTEGER NOT NULL, resolved INTEGER, resolved_at INTEGER)`,
+  `CREATE INDEX IF NOT EXISTS printer_log_printer_idx ON printer_log(printer_id,timestamp)`,
+  `CREATE TABLE IF NOT EXISTS feedback (id TEXT PRIMARY KEY, type TEXT NOT NULL, text TEXT NOT NULL, timestamp INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, sku_id TEXT, brand TEXT NOT NULL DEFAULT '', material TEXT NOT NULL DEFAULT '', color_name TEXT NOT NULL DEFAULT '', went_low_at INTEGER, ordered_at INTEGER, received_at INTEGER, status TEXT NOT NULL DEFAULT 'pending', settled INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS part_scan_log (id TEXT PRIMARY KEY, timestamp INTEGER NOT NULL, part_id TEXT, label TEXT NOT NULL DEFAULT '', delta REAL NOT NULL DEFAULT 0, action_label TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', reverse_qty INTEGER NOT NULL DEFAULT 0, undone INTEGER NOT NULL DEFAULT 0)`,
+  `INSERT OR IGNORE INTO app_meta(key,value) VALUES('schema_version','2')`,
+  `INSERT OR IGNORE INTO app_meta(key,value) VALUES('revision','0')`
+];
+
+function tursoArg(value){
+  if(value === null || value === undefined) return { type:'null' };
+  if(typeof value === 'boolean') return { type:'integer', value:value ? '1' : '0' };
+  if(typeof value === 'number'){
+    if(Number.isInteger(value)) return { type:'integer', value:String(value) };
+    return { type:'float', value:value };
+  }
+  return { type:'text', value:String(value) };
+}
+function tursoStatement(sql, args){
+  const stmt = { sql };
+  if(args && args.length) stmt.args = args.map(tursoArg);
+  return { type:'execute', stmt };
+}
+function tursoPipelineUrl(baseUrl){
+  if(!baseUrl) return ghApiUrl();
+  return String(baseUrl);
+}
+async function tursoPipeline(requests, baton, baseUrl){
+  let res;
+  try{
+    res = await fetch(tursoPipelineUrl(baseUrl), {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer ' + ghConfig.token, 'Content-Type':'application/json' },
+      body:JSON.stringify(baton ? { baton, requests } : { requests })
+    });
+  }catch(networkErr){ const err = new Error('Network error reaching Turso'); err.type='network'; throw err; }
+  if(!res.ok){
+    let serverDetail='';
+    try{
+      const raw=await res.text();
+      try{
+        const parsed=JSON.parse(raw);
+        serverDetail=parsed.message||parsed.error||parsed.code||raw;
+      }catch(ignore){ serverDetail=raw; }
+    }catch(ignore){}
+    serverDetail=String(serverDetail||'').replace(/\s+/g,' ').trim().slice(0,180);
+    const message='Turso HTTP error '+res.status+(serverDetail ? ': '+serverDetail : '');
+    const err=new Error(message);
+    err.type=(res.status===401||res.status===403)?'auth':'other';
+    throw err;
+  }
+  const body = await res.json();
+  const failed = (body.results || []).find(r=>r.type === 'error');
+  if(failed){
+    const detail = failed.error && (failed.error.message || failed.error.code) || 'SQL request failed';
+    const err = new Error(detail);
+    err.type = /auth|permission|not authorized|forbidden/i.test(detail) ? 'auth' : 'sql';
+    // The stream survives a failed statement, and the response still carries
+    // the next baton — hand it to the caller so an open transaction can be
+    // rolled back immediately instead of holding Turso's write lock until the
+    // server times the connection out.
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+function tursoExecuteResult(body, index){
+  const item = body && body.results && body.results[index || 0];
+  return item && item.response && item.response.result;
+}
+function tursoRows(body, index){
+  const result = tursoExecuteResult(body, index);
+  if(!result) return [];
+  const names = (result.cols || []).map(c=>c.name);
+  return (result.rows || []).map(row=>{
+    const out = {};
+    row.forEach((cell,i)=>{
+      if(!cell || cell.type === 'null') out[names[i]] = null;
+      else if(cell.type === 'integer' || cell.type === 'float') out[names[i]] = Number(cell.value);
+      else out[names[i]] = cell.value;
+    });
+    return out;
+  });
+}
+async function tursoEnsureSchema(){
+  // Every statement in TURSO_SCHEMA is CREATE ... IF NOT EXISTS or INSERT OR
+  // IGNORE, so running the whole thing on every connect is a no-op against a
+  // healthy database and silently repairs one that is missing a table, an
+  // index, or the app_meta bookkeeping rows. That matters because a missing
+  // `revision` row would make every save think nothing had changed remotely,
+  // and other devices would stop seeing updates. Bundling the version read and
+  // the column checks into the same pipeline keeps this to one round trip.
+  const reads = [
+    tursoStatement("SELECT value FROM app_meta WHERE key='schema_version'"),
+    tursoStatement('PRAGMA table_info(sku_barcodes)'),
+    tursoStatement('PRAGMA table_info(part_barcodes)')
+  ];
+  const bootstrap = TURSO_SCHEMA.map(sql=>tursoStatement(sql));
+  let versionIdx = bootstrap.length;
+  let info;
+  try{
+    info = await tursoPipeline(bootstrap.concat(reads, {type:'close'}));
+  }catch(err){
+    // A token without write access can still open the app read-only; only the
+    // repair half needs those rights. Re-read on its own so a viewer sees the
+    // inventory instead of a connection error.
+    if(err.type === 'auth' || err.type === 'network') throw err;
+    versionIdx = 0;
+    info = await tursoPipeline(reads.concat({type:'close'}));
+  }
+  const versionRow = tursoRows(info,versionIdx)[0];
+  const schemaVersion = versionRow ? (parseInt(versionRow.value,10) || 0) : 0;
+  // Verify physical columns even when the version row says v2: a remote
+  // pipeline can be interrupted between DDL statements, and the next launch
+  // must be able to finish that partial migration.
+  const skuOrderMissing = !tursoRows(info,versionIdx+1).some(c=>c.name==='sort_order');
+  const partOrderMissing = !tursoRows(info,versionIdx+2).some(c=>c.name==='sort_order');
+  if(schemaVersion < 2 || skuOrderMissing || partOrderMissing){
+    // v1 stored barcode membership but not array position. Add an explicit
+    // order so a save/reload cannot silently change which barcode is shown as
+    // the primary one. PRAGMA checks make this safe if a prior migration was
+    // interrupted after only one ALTER TABLE completed.
+    const migration = [];
+    if(skuOrderMissing) migration.push(tursoStatement('ALTER TABLE sku_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
+    if(partOrderMissing) migration.push(tursoStatement('ALTER TABLE part_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
+    // Existing v1 rows were inserted in JSON array order. Capture that rowid
+    // order before future replacements start maintaining sort_order directly.
+    if(schemaVersion < 2 || skuOrderMissing) migration.push(tursoStatement('UPDATE sku_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM sku_barcodes AS earlier WHERE earlier.sku_id=sku_barcodes.sku_id AND earlier.rowid<=sku_barcodes.rowid)'));
+    if(schemaVersion < 2 || partOrderMissing) migration.push(tursoStatement('UPDATE part_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM part_barcodes AS earlier WHERE earlier.part_id=part_barcodes.part_id AND earlier.rowid<=part_barcodes.rowid)'));
+    migration.push(tursoStatement("INSERT INTO app_meta(key,value) VALUES('schema_version','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value"),{type:'close'});
+    await tursoPipeline(migration);
+  }
+}
+function tursoBool(v){ return !!Number(v); }
+function tursoInsertMany(requests, table, columns, rows, replace){
+  const size = 80;
+  for(let start=0; start<rows.length; start+=size){
+    const batch = rows.slice(start,start+size);
+    const tuple = '(' + columns.map(()=>'?').join(',') + ')';
+    requests.push(tursoStatement(
+      `${replace ? 'INSERT OR REPLACE' : 'INSERT'} INTO ${table} (${columns.join(',')}) VALUES ${batch.map(()=>tuple).join(',')}`,
+      batch.flat()
+    ));
+  }
+}
+function tursoRecordMap(value){
+  if(Array.isArray(value)) return Object.fromEntries(value.filter(x=>x&&x.id).map(x=>[x.id,x]));
+  return value || {};
+}
+function tursoSyncTable(q, table, columns, beforeValue, afterValue, rowFn){
+  const before = tursoRecordMap(beforeValue), after = tursoRecordMap(afterValue);
+  const removed = Object.keys(before).filter(id=>!after[id]);
+  for(let i=0;i<removed.length;i+=200){
+    const ids=removed.slice(i,i+200);
+    q.push(tursoStatement(`DELETE FROM ${table} WHERE id IN (${ids.map(()=>'?').join(',')})`,ids));
+  }
+  const changed = Object.keys(after).filter(id=>!before[id] || JSON.stringify(before[id])!==JSON.stringify(after[id])).map(id=>after[id]);
+  tursoInsertMany(q,table,columns,changed.map(rowFn),true);
+  return { changed, removed };
+}
+function tursoDeltaRequests(before, d){
+  const q=[], b=before||freshDataSkeleton();
+  const skuCols=['id','brand','material','color_name','color_hex','box_count','loose_count','low_stock_threshold','low_stock_disabled','target_stock','weight_per_box_kg','purchase_url','location','notes','favorite','ordered','ordered_at','low_since','last_verified_at','verify_count','created_at','updated_at'];
+  const skuChange=tursoSyncTable(q,'skus',skuCols,b.skus,d.skus,s=>[s.id,s.brand||'',s.material||'',s.colorName||'',s.colorHex||'#808080',s.boxCount||0,s.looseCount||0,s.lowStockThreshold||0,!!s.lowStockDisabled,s.targetStock,s.weightPerBoxKg||1,s.purchaseUrl||'',s.location||'',s.notes||'',!!s.favorite,!!s.ordered,s.orderedAt,s.lowSince,s.lastVerifiedAt,s.verifyCount||0,s.createdAt||Date.now(),s.updatedAt||s.createdAt||Date.now()]);
+  const skuBarcodeIds=skuChange.changed.map(s=>s.id).concat(skuChange.removed);
+  for(let i=0;i<skuBarcodeIds.length;i+=200){ const ids=skuBarcodeIds.slice(i,i+200); q.unshift(tursoStatement(`DELETE FROM sku_barcodes WHERE sku_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
+  tursoInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skuChange.changed.flatMap(s=>(s.barcodes||[]).map((code,i)=>[s.id,code,i])),true);
+
+  const partCols=['id','name','mpn','category','models','description','notes','location','purchase_url','qty','low_stock_threshold','low_stock_disabled','target_stock','ordered','ordered_at','low_since','created_at','updated_at'];
+  const partChange=tursoSyncTable(q,'parts',partCols,b.parts,d.parts,p=>[p.id,p.name||'',p.mpn||'',p.category||'Other',p.models||'',p.description||'',p.notes||'',p.location||'',p.purchaseUrl||'',p.qty||0,p.lowStockThreshold||0,!!p.lowStockDisabled,p.targetStock,!!p.ordered,p.orderedAt,p.lowSince,p.createdAt||Date.now(),p.updatedAt||p.createdAt||Date.now()]);
+  const partBarcodeIds=partChange.changed.map(p=>p.id).concat(partChange.removed);
+  for(let i=0;i<partBarcodeIds.length;i+=200){ const ids=partBarcodeIds.slice(i,i+200); q.unshift(tursoStatement(`DELETE FROM part_barcodes WHERE part_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
+  tursoInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],partChange.changed.flatMap(p=>(p.barcodes||[]).map((code,i)=>[p.id,code,i])),true);
+
+  tursoSyncTable(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],b.events,d.events,e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]);
+  tursoSyncTable(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],b.scanLog,d.scanLog,e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]);
+  tursoSyncTable(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],b.printers,d.printers,p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]);
+  tursoSyncTable(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],b.printerLog,d.printerLog,e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]);
+  tursoSyncTable(q,'feedback',['id','type','text','timestamp'],b.feedback,d.feedback,e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]);
+  tursoSyncTable(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],b.orderLog,d.orderLog,o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]);
+  tursoSyncTable(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],b.partsScanLog,d.partsScanLog,e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]);
+
+  if(JSON.stringify(b.settings||{})!==JSON.stringify(d.settings||{})){
+    q.push(tursoStatement('DELETE FROM app_settings'),tursoStatement('DELETE FROM setting_values'));
+    const s=d.settings||{};
+    tursoInsertMany(q,'app_settings',['key','value','updated_at'],[['defaultThreshold',String(s.defaultThreshold===undefined?2:s.defaultThreshold),0],['aiExtraContext',s.aiExtraContext||'',s.aiExtraContextUpdatedAt||0],['seedBambuColorsV2',s.seedBambuColorsV2?'1':'0',0]],true);
+    const listRows=[], lists={brands:s.brands||[],materials:s.materials||[],issueCategories:s.issueCategories||[],printerGroups:s.printerGroups||[],partCategories:s.partCategories||[]};
+    Object.keys(lists).forEach(kind=>lists[kind].forEach((value,i)=>listRows.push([kind,value,null,i])));
+    (s.colors||[]).forEach((c,i)=>listRows.push(['colors',c.name,c.hex,i]));
+    tursoInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows,true);
+  }
+  return q;
+}
+function tursoResetRequests(d){
+  const q = [];
+  ['sku_barcodes','part_barcodes','inventory_events','scan_log','printer_log','feedback','orders','part_scan_log','skus','parts','printers','setting_values','app_settings'].forEach(t=>q.push(tursoStatement('DELETE FROM ' + t)));
+  const skus = Object.values(d.skus || {});
+  tursoInsertMany(q,'skus',['id','brand','material','color_name','color_hex','box_count','loose_count','low_stock_threshold','low_stock_disabled','target_stock','weight_per_box_kg','purchase_url','location','notes','favorite','ordered','ordered_at','low_since','last_verified_at','verify_count','created_at','updated_at'],skus.map(s=>[
+    s.id,s.brand||'',s.material||'',s.colorName||'',s.colorHex||'#808080',s.boxCount||0,s.looseCount||0,s.lowStockThreshold||0,!!s.lowStockDisabled,s.targetStock,s.weightPerBoxKg||1,s.purchaseUrl||'',s.location||'',s.notes||'',!!s.favorite,!!s.ordered,s.orderedAt,s.lowSince,s.lastVerifiedAt,s.verifyCount||0,s.createdAt||Date.now(),s.updatedAt||s.createdAt||Date.now()
+  ]));
+  tursoInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skus.flatMap(s=>(s.barcodes||[]).map((b,i)=>[s.id,b,i])));
+  const parts = Object.values(d.parts || {});
+  tursoInsertMany(q,'parts',['id','name','mpn','category','models','description','notes','location','purchase_url','qty','low_stock_threshold','low_stock_disabled','target_stock','ordered','ordered_at','low_since','created_at','updated_at'],parts.map(p=>[
+    p.id,p.name||'',p.mpn||'',p.category||'Other',p.models||'',p.description||'',p.notes||'',p.location||'',p.purchaseUrl||'',p.qty||0,p.lowStockThreshold||0,!!p.lowStockDisabled,p.targetStock,!!p.ordered,p.orderedAt,p.lowSince,p.createdAt||Date.now(),p.updatedAt||p.createdAt||Date.now()
+  ]));
+  tursoInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],parts.flatMap(p=>(p.barcodes||[]).map((b,i)=>[p.id,b,i])));
+  tursoInsertMany(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],(d.events||[]).map(e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]));
+  tursoInsertMany(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],(d.scanLog||[]).map(e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]));
+  const printers = Object.values(d.printers || {});
+  tursoInsertMany(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],printers.map(p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]));
+  tursoInsertMany(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],(d.printerLog||[]).map(e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]));
+  tursoInsertMany(q,'feedback',['id','type','text','timestamp'],(d.feedback||[]).map(e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]));
+  tursoInsertMany(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],(d.orderLog||[]).map(o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]));
+  tursoInsertMany(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],(d.partsScanLog||[]).map(e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]));
+  const settings = d.settings || {};
+  tursoInsertMany(q,'app_settings',['key','value','updated_at'],[
+    ['defaultThreshold',String(settings.defaultThreshold === undefined ? 2 : settings.defaultThreshold),0],
+    ['aiExtraContext',settings.aiExtraContext||'',settings.aiExtraContextUpdatedAt||0],
+    ['seedBambuColorsV2',settings.seedBambuColorsV2?'1':'0',0]
+  ]);
+  const listRows = [];
+  const lists = { brands:settings.brands||[], materials:settings.materials||[], issueCategories:settings.issueCategories||[], printerGroups:settings.printerGroups||[], partCategories:settings.partCategories||[] };
+  Object.keys(lists).forEach(kind=>lists[kind].forEach((value,i)=>listRows.push([kind,value,null,i])));
+  (settings.colors||[]).forEach((c,i)=>listRows.push(['colors',c.name,c.hex,i]));
+  tursoInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows);
+  return q;
+}
+async function tursoLoadData(){
+  const selects = [
+    `SELECT value FROM app_meta WHERE key='revision'`, 'SELECT * FROM app_settings', 'SELECT * FROM setting_values ORDER BY kind,sort_order',
+    'SELECT * FROM skus','SELECT * FROM sku_barcodes ORDER BY sku_id,sort_order,barcode','SELECT * FROM parts','SELECT * FROM part_barcodes ORDER BY part_id,sort_order,barcode','SELECT * FROM inventory_events ORDER BY timestamp',
+    'SELECT * FROM scan_log ORDER BY timestamp','SELECT * FROM printers','SELECT * FROM printer_log ORDER BY timestamp','SELECT * FROM feedback ORDER BY timestamp',
+    'SELECT * FROM orders','SELECT * FROM part_scan_log ORDER BY timestamp'
+  ];
+  const body = await tursoPipeline(selects.map(sql=>tursoStatement(sql)).concat({type:'close'}));
+  const rows = selects.map((_,i)=>tursoRows(body,i));
+  const revision = rows[0][0] ? String(rows[0][0].value) : '0';
+  const d = { skus:{}, events:[], settings:{}, scanLog:[], printers:{}, printerLog:[], feedback:[], orderLog:[], parts:{}, partsScanLog:[] };
+  if(rows[1].length){
+    d.settings.brands=[]; d.settings.materials=[]; d.settings.colors=[];
+    d.settings.issueCategories=[]; d.settings.printerGroups=[]; d.settings.partCategories=[];
+  }
+  rows[1].forEach(r=>{ if(r.key==='defaultThreshold') d.settings.defaultThreshold=Number(r.value); else if(r.key==='aiExtraContext'){ d.settings.aiExtraContext=r.value; d.settings.aiExtraContextUpdatedAt=r.updated_at||0; } else if(r.key==='seedBambuColorsV2') d.settings.seedBambuColorsV2=r.value==='1'; });
+  const listMap = { brands:'brands',materials:'materials',issueCategories:'issueCategories',printerGroups:'printerGroups',partCategories:'partCategories' };
+  rows[2].forEach(r=>{ if(r.kind==='colors'){ (d.settings.colors||(d.settings.colors=[])).push({name:r.value,hex:r.color_hex}); } else if(listMap[r.kind]){ (d.settings[listMap[r.kind]]||(d.settings[listMap[r.kind]]=[])).push(r.value); } });
+  rows[3].forEach(r=>{ d.skus[r.id]={ id:r.id,barcodes:[],brand:r.brand,material:r.material,colorName:r.color_name,colorHex:r.color_hex,boxCount:r.box_count,looseCount:r.loose_count,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:tursoBool(r.low_stock_disabled),targetStock:r.target_stock,weightPerBoxKg:r.weight_per_box_kg,purchaseUrl:r.purchase_url,location:r.location,notes:r.notes,favorite:tursoBool(r.favorite),ordered:tursoBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,lastVerifiedAt:r.last_verified_at,verifyCount:r.verify_count,createdAt:r.created_at,updatedAt:r.updated_at }; });
+  rows[4].forEach(r=>{ if(d.skus[r.sku_id]) d.skus[r.sku_id].barcodes.push(r.barcode); });
+  rows[5].forEach(r=>{ d.parts[r.id]={ id:r.id,barcodes:[],name:r.name,mpn:r.mpn,category:r.category,models:r.models,description:r.description,notes:r.notes,location:r.location,purchaseUrl:r.purchase_url,qty:r.qty,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:tursoBool(r.low_stock_disabled),targetStock:r.target_stock,ordered:tursoBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,createdAt:r.created_at,updatedAt:r.updated_at }; });
+  rows[6].forEach(r=>{ if(d.parts[r.part_id]) d.parts[r.part_id].barcodes.push(r.barcode); });
+  d.events=rows[7].map(r=>{
+    const event={id:r.id,action:r.action,delta:r.delta,source:r.source,sample:tursoBool(r.sample),timestamp:r.timestamp};
+    if(r.sku_id !== null && r.sku_id !== undefined) event.skuId=r.sku_id;
+    if(r.part_id !== null && r.part_id !== undefined) event.partId=r.part_id;
+    return event;
+  });
+  d.scanLog=rows[8].map(r=>({id:r.id,timestamp:r.timestamp,skuId:r.sku_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{boxCount:r.reverse_box_count,looseCount:r.reverse_loose_count},undone:tursoBool(r.undone)}));
+  rows[9].forEach(r=>{ d.printers[r.id]={id:r.id,name:r.name,status:r.status,group:r.group_name,order:r.sort_order,lastServicedAt:r.last_serviced_at,createdAt:r.created_at,updatedAt:r.updated_at}; });
+  d.printerLog=rows[10].map(r=>{
+    const entry={id:r.id,printerId:r.printer_id,type:r.type,text:r.text,timestamp:r.timestamp,resolved:r.resolved===null?null:tursoBool(r.resolved),resolvedAt:r.resolved_at};
+    // category/fixText are subtype fields. Omitting an inapplicable SQL NULL
+    // keeps the old JSON shape and, for issue/note records, lets the legacy
+    // defaulting pass repair a genuinely missing category.
+    if(r.category !== null && r.category !== undefined) entry.category=r.category;
+    if(r.type==='issue') entry.fixText=r.fix_text||'';
+    return entry;
+  });
+  d.feedback=rows[11].map(r=>({id:r.id,type:r.type,text:r.text,timestamp:r.timestamp}));
+  d.orderLog=rows[12].map(r=>({id:r.id,skuId:r.sku_id,brand:r.brand,material:r.material,colorName:r.color_name,wentLowAt:r.went_low_at,orderedAt:r.ordered_at,receivedAt:r.received_at,status:r.status,settled:tursoBool(r.settled)}));
+  d.partsScanLog=rows[13].map(r=>({id:r.id,timestamp:r.timestamp,partId:r.part_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{qty:r.reverse_qty},undone:tursoBool(r.undone)}));
+  ensureSettingsDefaults(d);
+  return { json:d, sha:revision };
+}
+
 /* ---------- Share link ----------
-   Packs the current GitHub connection (owner/repo/path/token) into the URL
-   fragment so someone new can open a link instead of typing four fields by
+   Packs the current Turso connection (database URL/token) into the URL
+   fragment so someone new can open a link instead of typing both fields by
    hand. The fragment (everything after #) is never sent to any server —
    only this browser ever sees it — but it still IS the token in plain text,
    so it's scrubbed out of the address bar the instant it's read, and every
@@ -2082,14 +2413,14 @@ function fromBase64Url(s){
   return s;
 }
 function buildGhShareLink(){
-  const payload = JSON.stringify({ o: ghConfig.owner, r: ghConfig.repo, p: ghConfig.path, t: ghConfig.token, iat: Date.now() });
-  return location.origin + location.pathname + '#connect=' + toBase64Url(utf8ToBase64(payload));
+  const payload = JSON.stringify({ u: ghConfig.url, t: ghConfig.token, iat: Date.now() });
+  return location.href.split('#')[0] + '#connect=' + toBase64Url(utf8ToBase64(payload));
 }
 function copyGhShareLink(){
-  if(!hasGhConfig()){ toast('Connect to GitHub first — the link is built from your current connection'); return; }
+  if(!hasGhConfig()){ toast('Connect to Turso first — the link is built from your current connection'); return; }
   const proceed = confirm(
-    "This link contains your GitHub token in plain text. Anyone who has it can read and change this shared data — treat it exactly like a password.\n\n" +
-    "Only send it somewhere private (not a public channel), avoid pasting it anywhere it might get logged, and consider using a separate token per person so any one link can be revoked later without affecting anyone else.\n\n" +
+    "This Base64-encoded link contains your Turso token. Anyone who has it can use the permissions granted to that token — treat it exactly like a password.\n\n" +
+    "Only send it somewhere private, and consider using a separate database-scoped token per person so access can be revoked independently.\n\n" +
     "Copy the link now?"
   );
   if(!proceed) return;
@@ -2109,38 +2440,19 @@ function consumeShareLinkIfPresent(){
   history.replaceState(null, '', location.pathname + location.search);
   let parsed;
   try{ parsed = JSON.parse(base64ToUtf8(fromBase64Url(m[1]))); }catch(e){ return null; }
-  if(!parsed || !parsed.o || !parsed.r || !parsed.t) return null;
+  if(!parsed || !parsed.u || !parsed.t) return null;
   // Check the age BEFORE handing anything back — an expired link must never
-  // reach the caller with owner/repo/token attached, so there's nothing to
+  // reach the caller with URL/token attached, so there's nothing to
   // accidentally pre-fill into a form even by mistake. Missing/malformed
   // timestamps (e.g. a link built before this check existed) fail closed.
   if(typeof parsed.iat !== 'number' || (Date.now() - parsed.iat) > SHARE_LINK_MAX_AGE_MS){
     return { expired: true };
   }
-  return { owner: parsed.o, repo: parsed.r, path: parsed.p || 'inventory-data.json', token: parsed.t };
+  return { url: parsed.u, token: parsed.t };
 }
 async function ghFetchFile(){
-  let res;
-  try{
-    res = await fetch(ghApiUrl(), {
-      headers: { 'Authorization': 'Bearer ' + ghConfig.token, 'Accept': 'application/vnd.github+json' }
-    });
-  }catch(networkErr){
-    const err = new Error('Network error reaching GitHub'); err.type = 'network'; throw err;
-  }
-  if(res.status === 404){ const err = new Error('File not found'); err.type = 'missing'; throw err; }
-  if(res.status === 401 || res.status === 403){ const err = new Error('GitHub rejected the token'); err.type = 'auth'; throw err; }
-  if(!res.ok){ const err = new Error('GitHub error ' + res.status); err.type = 'other'; throw err; }
-  const body = await res.json();
-  // GitHub's contents API stops inlining file content at 1 MB. The app keeps
-  // the file well under that by pruning old events, but fail loudly if it happens.
-  if(typeof body.content !== 'string' || (body.content === '' && body.size > 0)){
-    const err = new Error('The data file is too large for the GitHub API (over 1 MB). Export a backup, then clear old history.');
-    err.type = 'other';
-    throw err;
-  }
-  const json = JSON.parse(base64ToUtf8(body.content));
-  return { json, sha: body.sha };
+  await tursoEnsureSchema();
+  return tursoLoadData();
 }
 /* ---------- Commit messages ----------
    The repo history is the audit trail and the real backup here, so a commit
@@ -2295,34 +2607,55 @@ function ghCommitMessage(){
   return subject + '\n\n' + body.join('\n') + '\n\n' + stamp;
 }
 async function ghSaveFile(){
-  const payload = JSON.stringify(data);
-  const body = {
-    message: ghCommitMessage(),
-    content: utf8ToBase64(payload)
-  };
-  if(ghSha) body.sha = ghSha;
-  let res;
+  let baton = null;
+  let transactionUrl = null;
   try{
-    res = await fetch(ghApiUrl(), {
-      method: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + ghConfig.token,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-  }catch(networkErr){
-    const err = new Error('Network error reaching GitHub'); err.type = 'network'; throw err;
+    const begun = await tursoPipeline([tursoStatement('BEGIN'),tursoStatement("SELECT value FROM app_meta WHERE key='revision'")]);
+    baton = begun.baton;
+    transactionUrl = begun.base_url || null;
+    const revisionRows = tursoRows(begun,1);
+    const remoteRevision = revisionRows[0] ? String(revisionRows[0].value) : '0';
+    if(String(ghSha === null ? '0' : ghSha) !== remoteRevision){
+      await tursoPipeline([tursoStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl);
+      baton = null;
+      const conflict = new Error('Conflict'); conflict.type='conflict'; throw conflict;
+    }
+    const nextRevision = String(Number(remoteRevision) + 1);
+    let base = null;
+    try{ base = ghBaseJson ? JSON.parse(ghBaseJson) : null; }catch(ignore){}
+    // Freeze exactly what this save is about to write, and remember which
+    // revision of `data` it came from. Anything the user does while the
+    // network round trips are in flight belongs to the NEXT save — recording
+    // the live `data` as the new base afterwards would mark those edits as
+    // already-synced and they would never be written at all.
+    const sentVersion = ghDataVersion;
+    const requests = tursoDeltaRequests(base,data);
+    const snapshot = JSON.stringify(data);
+    requests.push(tursoStatement("INSERT INTO app_meta(key,value) VALUES('revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[nextRevision]));
+    // Long pipelines (a first full sync, or a restored backup) can exceed what
+    // a single HTTP request will carry, so send them in chunks over the same
+    // open transaction. The COMMIT rides along with the final chunk.
+    const CHUNK = 150;
+    for(let start=0; start<requests.length; start+=CHUNK){
+      const chunk = requests.slice(start,start+CHUNK);
+      const isLast = start + CHUNK >= requests.length;
+      if(isLast) chunk.push(tursoStatement('COMMIT'),{type:'close'});
+      const written = await tursoPipeline(chunk,baton,transactionUrl);
+      baton = isLast ? null : written.baton;
+      transactionUrl = written.base_url || transactionUrl;
+    }
+    ghSha = nextRevision;
+    setGhBase(snapshot);
+    return sentVersion;
+  }catch(err){
+    // A failed statement leaves the transaction open; the error carries the
+    // baton that reaches it.
+    if(err && err.body && err.body.baton) baton = err.body.baton;
+    if(baton){
+      try{ await tursoPipeline([tursoStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl); }catch(ignore){}
+    }
+    throw err;
   }
-  // 409 = our sha is stale (someone saved first). 422 covers the same race
-  // when we have no sha yet (e.g. two people creating the file at first setup).
-  if(res.status === 409 || res.status === 422){ const err = new Error('Conflict'); err.type = 'conflict'; throw err; }
-  if(res.status === 401 || res.status === 403){ const err = new Error('GitHub rejected the token'); err.type = 'auth'; throw err; }
-  if(!res.ok){ const err = new Error('GitHub error ' + res.status); err.type = 'other'; throw err; }
-  const respBody = await res.json();
-  ghSha = respBody.content.sha;
-  setGhBase(payload);
 }
 function setSyncIndicatorState(state, label){
   const wrap = document.getElementById('syncIndicator');
@@ -2342,7 +2675,7 @@ function updateSyncStatusUI(){
     setSyncIndicatorState('idle');
     return;
   }
-  const where = ghConfig.owner + '/' + ghConfig.repo + ' — ' + ghConfig.path;
+  const where = String(ghConfig.url || '').replace(/^\w+:\/\//,'');
   if(ghSaveInFlight){
     if(el) el.textContent = 'Syncing… (' + where + ')';
     setSyncIndicatorState('syncing');
@@ -2365,6 +2698,7 @@ function updateSyncStatusUI(){
 function saveData(){
   reconcileOrderTracking(data);
   ghDirty = true;
+  ghDataVersion++;
   if(!ghDirtySince) ghDirtySince = Date.now();
   saveLocalCache();
   updateSyncStatusUI();
@@ -2382,10 +2716,16 @@ async function flushGithubSave(){
   updateSyncStatusUI();
   try{
     const syncStart = performance.now();
-    await ghSaveFile();
+    const sentVersion = await ghSaveFile();
     recordSyncDuration(performance.now() - syncStart); // only successful syncs count toward the average
-    ghDirty = false;
-    ghDirtySince = null;
+    // Edits made while the save was in flight are not covered by it — stay
+    // dirty so the queued/debounced follow-up actually pushes them.
+    ghDirty = ghDataVersion !== sentVersion;
+    if(ghDirty){
+      ghSaveQueued = true;
+    } else {
+      ghDirtySince = null;
+    }
     ghConflictStreak = 0;
     ghLastSyncedAt = Date.now();
     saveLocalCache();
@@ -2394,9 +2734,15 @@ async function flushGithubSave(){
     if(err.type === 'conflict'){
       await handleSyncConflict();
     } else if(err.type === 'auth'){
-      toast('GitHub rejected the saved token — open Settings to fix it');
+      toast('Turso rejected the saved token — open Settings to fix it');
+      // Keep a slow retry alive so a token that is fixed (or a transient 401)
+      // resumes syncing on its own rather than waiting for the next edit.
+      clearTimeout(ghSaveTimer);
+      ghSaveTimer = setTimeout(flushGithubSave, 60000);
     } else {
-      toast('Could not sync to GitHub — will retry shortly. Your changes are safe locally.');
+      console.error('Turso sync failed',err);
+      const detail=String(err&&err.message||'unknown error').replace(/\s+/g,' ').slice(0,120);
+      toast('Could not sync to Turso ('+detail+') — retrying shortly. Your changes are safe locally.',8000);
       clearTimeout(ghSaveTimer);
       ghSaveTimer = setTimeout(flushGithubSave, 15000);
     }
@@ -2407,26 +2753,16 @@ async function flushGithubSave(){
   }
 }
 async function ghConditionalCheck(){
-  // Cheap "did anything change" check. A 304 (nothing changed) doesn't count
-  // against GitHub's rate limit, so this is safe to call often.
+  // Cheap revision query before pulling all SQL tables.
   if(!hasGhConfig() || !ghSha) return null;
-  let res;
   try{
-    res = await fetch(ghApiUrl(), {
-      headers: {
-        'Authorization': 'Bearer ' + ghConfig.token,
-        'Accept': 'application/vnd.github+json',
-        'If-None-Match': '"' + ghSha + '"'
-      }
-    });
+    const body = await tursoPipeline([tursoStatement("SELECT value FROM app_meta WHERE key='revision'"),{type:'close'}]);
+    const found = tursoRows(body,0);
+    const revision = found[0] ? String(found[0].value) : '0';
+    if(revision === String(ghSha)) return { changed:false };
+    const remote = await tursoLoadData();
+    return { changed:true, json:remote.json, sha:remote.sha };
   }catch(e){ return null; }
-  if(res.status === 304) return { changed:false };
-  if(res.status === 200){
-    const body = await res.json();
-    if(body.sha === ghSha) return { changed:false };
-    return { changed:true, json: JSON.parse(base64ToUtf8(body.content)), sha: body.sha };
-  }
-  return null;
 }
 function applyFreshRemoteData(remote, message){
   setGhBase(JSON.stringify(remote.json));
@@ -2444,7 +2780,7 @@ function applyFreshRemoteData(remote, message){
   if(message) toast(message);
 }
 
-/* ---------- Three-way merge (base = last synced, local = this browser, remote = GitHub) ----------
+/* ---------- Three-way merge (base = last synced, local = this browser, remote = Turso) ----------
    Used when a save conflicts because someone else saved first. Instead of
    throwing away local changes, combine both sides:
    - log arrays (events / scanLog / printerLog): union by id; entries that were
@@ -2707,8 +3043,7 @@ async function resolveSyncConflict(){
 async function pollGhStaleness(){
   if(!hasGhConfig() || ghSaveInFlight) return;
   if(!ghSha){
-    // No sha yet: either we booted offline from the local copy, or the shared
-    // file hasn't been created. Try to reach GitHub and reconcile.
+    // No revision yet: we booted offline from the local copy. Try Turso again.
     if(ghDirty) return; // the pending save will reconcile via its conflict path
     ghCheckingInFlight = true;
     updateSyncStatusUI();
@@ -2767,17 +3102,17 @@ async function refreshFromGithub(){
     if(!confirm('You have unsaved changes. Refreshing will replace them with the latest shared version. Continue?')) return;
   }
   if(pendingFreshRemote){
-    applyFreshRemoteData(pendingFreshRemote, 'Refreshed from GitHub');
+    applyFreshRemoteData(pendingFreshRemote, 'Refreshed from Turso');
     pendingFreshRemote = null;
     return;
   }
   try{
     const remote = await ghFetchFile();
-    applyFreshRemoteData(remote, 'Refreshed from GitHub');
+    applyFreshRemoteData(remote, 'Refreshed from Turso');
   }catch(e){ toast('Could not refresh — try again'); }
 }
 async function manualGhSync(){
-  if(!hasGhConfig()){ toast('Connect to GitHub in Settings first'); return; }
+  if(!hasGhConfig()){ toast('Connect to Turso in Settings first'); return; }
   if(ghSaveInFlight || ghCheckingInFlight) return;
   clearTimeout(ghSaveTimer);
   if(ghDirty){
@@ -2803,19 +3138,17 @@ async function manualGhSync(){
 function renderGhGateSetup(isChange){
   const body = document.getElementById('ghGateBody');
   body.innerHTML = `
-    <div class="field"><label>Repo owner (your GitHub username)</label><input type="text" id="ghs_owner" placeholder="e.g. steven123" value="${escapeHtml(ghConfig.owner||'')}"></div>
-    <div class="field"><label>Repo name</label><input type="text" id="ghs_repo" placeholder="e.g. filament-inventory-data" value="${escapeHtml(ghConfig.repo||'')}"></div>
-    <div class="field"><label>File path in the repo</label><input type="text" id="ghs_path" placeholder="inventory-data.json" value="${escapeHtml(ghConfig.path||'inventory-data.json')}"></div>
-    <div class="field"><label>Personal access token <span style="font-weight:400;">(fine-grained, Contents read/write, this repo only)</span></label><input type="password" id="ghs_token" placeholder="github_pat_..." value=""></div>
+    <div class="field"><label>Turso database URL</label><input type="url" id="ghs_url" placeholder="libsql://database-organization.turso.io" value="${escapeHtml(ghConfig.url||'')}"></div>
+    <div class="field"><label>Turso database token <span style="font-weight:400;">(database-scoped, read/write)</span></label><input type="password" id="ghs_token" placeholder="eyJ..." value=""></div>
     <div class="form-actions" style="justify-content:space-between;">
       ${isChange ? '<button class="btn" onclick="closeGhGateIfConfigured()">Cancel</button>' : '<span></span>'}
       <button class="btn primary" onclick="saveGhSetupForm()">Connect</button>
     </div>
-    <p class="footer-note" style="margin-bottom:0;">The token is stored only in this browser's local storage. It's never written into this page's code.</p>
+    <p class="footer-note" style="margin-bottom:0;">The URL and token are stored only in this browser's local storage. First connection creates the SQL schema automatically, so the token must initially allow schema changes.</p>
   `;
 }
 function renderGhGateLoading(){
-  document.getElementById('ghGateBody').innerHTML = `<div style="text-align:center;padding:10px 0;"><div class="gh-spinner"></div><div class="footer-note" style="margin:0;">Loading data from GitHub…</div></div>`;
+  document.getElementById('ghGateBody').innerHTML = `<div style="text-align:center;padding:10px 0;"><div class="gh-spinner"></div><div class="footer-note" style="margin:0;">Connecting to Turso and loading SQL data…</div></div>`;
 }
 function renderGhGateError(message, showChangeLink){
   document.getElementById('ghGateBody').innerHTML = `
@@ -2844,12 +3177,11 @@ function openGhConnectionModal(){
   renderGhGateSetup(true);
 }
 function saveGhSetupForm(){
-  const owner = document.getElementById('ghs_owner').value.trim();
-  const repo = document.getElementById('ghs_repo').value.trim();
-  const path = document.getElementById('ghs_path').value.trim() || 'inventory-data.json';
+  const url = document.getElementById('ghs_url').value.trim();
   const token = document.getElementById('ghs_token').value.trim();
-  if(!owner || !repo || !token){ toast('Fill in owner, repo, and token'); return; }
-  ghConfig = { owner, repo, path, token };
+  if(!url || !token){ toast('Fill in the Turso URL and token'); return; }
+  if(!/^(libsql|turso|https):\/\//i.test(url)){ toast('Use the full Turso database URL'); return; }
+  ghConfig = { url, token };
   saveGhConfigToStorage();
   ghSha = null;
   initApp();
@@ -2874,11 +3206,8 @@ async function initApp(){
       showGhGate();
       renderGhGateSetup(true);
       setTimeout(()=>{
-        const o=document.getElementById('ghs_owner'), r=document.getElementById('ghs_repo'),
-              p=document.getElementById('ghs_path'), t=document.getElementById('ghs_token');
-        if(o) o.value = validShared.owner;
-        if(r) r.value = validShared.repo;
-        if(p) p.value = validShared.path;
+        const u=document.getElementById('ghs_url'), t=document.getElementById('ghs_token');
+        if(u) u.value = validShared.url;
         if(t) t.value = validShared.token;
       }, 30);
       return;
@@ -2902,7 +3231,7 @@ async function initApp(){
     const remote = await ghFetchFile();
     const cache = loadLocalCache();
     if(localCacheWasDirty() && cache){
-      // The last session ended with changes that never reached GitHub
+      // The last session ended with changes that never reached Turso
       // (tab closed too quickly, or offline). Merge them in rather than lose them.
       try{
         const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
@@ -2925,10 +3254,10 @@ async function initApp(){
       else data = freshDataSkeleton();
       ghSha = null;
     } else if(err.type === 'auth'){
-      renderGhGateError('GitHub rejected this token. Check it has Contents read/write access to this repo, then reconnect.', true);
+      renderGhGateError('Turso rejected this token. Check that it is a database token with read/write and schema access, then reconnect.', true);
       return;
     } else if(err.type === 'network'){
-      // GitHub unreachable — fall back to this browser's local copy and keep
+      // Turso unreachable — fall back to this browser's local copy and keep
       // retrying in the background instead of blocking the whole app.
       const cache = loadLocalCache();
       if(cache){
@@ -2943,14 +3272,14 @@ async function initApp(){
         syncAskAiExtraContextField();
         if(migratedOffline) saveData();
         setSyncIndicatorState('error', 'Offline — local copy');
-        toast("Couldn't reach GitHub — using this device's last local copy. Will keep retrying.");
+        toast("Couldn't reach Turso — using this device's last local copy. Will keep retrying.");
         startGhPolling();
         return;
       }
-      renderGhGateError('Could not reach GitHub. Check your connection and retry.', true);
+      renderGhGateError('Could not reach Turso. Check your connection and retry.', true);
       return;
     } else {
-      renderGhGateError('Something went wrong talking to GitHub (' + err.message + ').', true);
+      renderGhGateError('Something went wrong talking to Turso (' + err.message + ').', true);
       return;
     }
   }
@@ -2999,7 +3328,7 @@ function removeToastItem(id){
   el.classList.remove('show');
   setTimeout(()=>el.remove(), 220);
 }
-function toast(msg){
+function toast(msg, requestedDuration){
   const el = document.createElement('div');
   el.className = 'toast-item dismissible-item';
   const span = document.createElement('span');
@@ -3013,7 +3342,7 @@ function toast(msg){
   el.appendChild(closeBtn);
   // Longer messages (e.g. merge notices) get more time on screen instead of
   // flashing by before they can be read.
-  const duration = Math.min(7000, Math.max(2200, msg.length * 60));
+  const duration = requestedDuration || Math.min(7000, Math.max(2200, msg.length * 60));
   addToastItem(el, duration);
 }
 let undoSnapshot = null;
@@ -3076,7 +3405,10 @@ function undoScanLogEntry(logId){
   if(entry.reverse.boxCount) sku.boxCount = Math.max(0, sku.boxCount + entry.reverse.boxCount);
   if(entry.reverse.looseCount) sku.looseCount = Math.max(0, sku.looseCount + entry.reverse.looseCount);
   sku.updatedAt = Date.now();
-  logEvent(sku.id, 'undo_scan', -entry.delta, 'undo');
+  // A reversed scan-out has to come off the usage figures too (see
+  // isUsageEvent), so it gets its own action rather than the generic undo.
+  const wasUsage = entry.actionLabel === 'Scanned out' || entry.actionLabel === 'Scanned out (no box)';
+  logEvent(sku.id, wasUsage ? 'undo_scan_out' : 'undo_scan', -entry.delta, 'undo');
   entry.undone = true;
   saveData();
   renderAll();
@@ -3439,7 +3771,7 @@ function addManualEntry(){
       {boxCount:-boxQty, looseCount:-looseQty});
     showUndoBar('+' + qtyLabel + ' to ' + skuLabel(sku));
   } else {
-    const id = barcode || uid('manual');
+    const id = newRecordId(data.skus, barcode, 'manual');
     sku = {
       id, barcodes: barcode ? [barcode] : [], brand, material, colorName: color.name, colorHex: color.hex,
       boxCount: boxQty,
@@ -3584,9 +3916,28 @@ function saveSkuModal(){
   ensureListedOption('materials', material);
   ensureListedColor(color);
   captureUndo();
-  const id = barcode || uid('manual');
+  // A new box of a filament that is already tracked often carries a different
+  // UPC (another batch, another retailer). Attach the code to the existing
+  // record and add the stock rather than splitting one filament in two — the
+  // same rule Quick Add already follows.
+  const existing = findSkuByAttributes(brand, material, color.name);
+  if(existing){
+    if(barcode && !(existing.barcodes||[]).includes(barcode)){
+      if(!existing.barcodes) existing.barcodes = [];
+      existing.barcodes.push(barcode);
+    }
+    if(currentMode==='in') existing.boxCount += qty; else existing.looseCount += qty;
+    existing.updatedAt = Date.now();
+    logEvent(existing.id, currentMode==='in' ? 'scan_in' : 'scan_out_no_box', qty, 'barcode');
+    addScanLogEntry(existing, skuLabel(existing), qty, 'Linked new barcode', 'barcode',
+      currentMode==='in' ? {boxCount:-qty} : {looseCount:-qty});
+    saveData(); renderAll(); refreshAllDropdownSources(); closeSkuModal();
+    showUndoBar('Linked barcode to ' + skuLabel(existing) + ' and added ' + qty);
+    return;
+  }
   const sku = {
-    id, barcodes: barcode ? [barcode] : [], brand, material, colorName: color.name, colorHex: color.hex,
+    id: newRecordId(data.skus, barcode, 'manual'),
+    barcodes: barcode ? [barcode] : [], brand, material, colorName: color.name, colorHex: color.hex,
     boxCount: currentMode==='in' ? qty : 0,
     looseCount: currentMode==='out' ? qty : 0,
     lowStockThreshold: threshold,
@@ -3594,8 +3945,8 @@ function saveSkuModal(){
     weightPerBoxKg, purchaseUrl, location, notes,
     createdAt: Date.now(), updatedAt: Date.now()
   };
-  data.skus[id] = sku;
-  logEvent(id, 'sku_created', qty, 'barcode');
+  data.skus[sku.id] = sku;
+  logEvent(sku.id, 'sku_created', qty, 'barcode');
   addScanLogEntry(sku, skuLabel(sku), qty, 'Registered new barcode', 'barcode',
     currentMode==='in' ? {boxCount:-qty} : {looseCount:-qty});
   saveData(); renderAll(); refreshAllDropdownSources(); closeSkuModal();
@@ -3886,7 +4237,13 @@ function mergeMaterials(){
       if(!keeper.targetStock && dupe.targetStock) keeper.targetStock = dupe.targetStock;
       keeper.barcodes = [...new Set([...(keeper.barcodes||[]), ...(dupe.barcodes||[])])];
       if(!keeper.purchaseUrl && dupe.purchaseUrl) keeper.purchaseUrl = dupe.purchaseUrl;
+      // Repoint every reference, not just the activity log: a scan-log row
+      // left pointing at the deleted id loses its Undo button, and an open
+      // order would be auto-cancelled by reconcileOrderTracking and skew the
+      // order-time stats in Reports.
       data.events.forEach(ev => { if(ev.skuId === dupe.id) ev.skuId = keeper.id; });
+      data.scanLog.forEach(e => { if(e.skuId === dupe.id) e.skuId = keeper.id; });
+      data.orderLog.forEach(o => { if(o.skuId === dupe.id) o.skuId = keeper.id; });
       delete data.skus[dupe.id];
       mergedDupes++;
     }
@@ -3948,9 +4305,23 @@ function removeSettingsItem(type, index){
 
 /* ---------- Database Health ----------
    Purely informational — everything here reads the already-loaded `data`
-   object and this browser's own recent sync timings. No extra GitHub
-   requests, no writes, nothing scheduled. This measures whether the app
-   stays fast, not whether GitHub would accept a larger file (it would). */
+   object and this browser's own recent sync timings. No extra Turso
+   requests, no writes, nothing scheduled.
+
+   What this panel is actually watching, now that the data lives in Turso
+   rather than in one JSON file on GitHub:
+
+   - Saves are deltas, so the size of `data` no longer affects how much a
+     scan costs to write. It still affects LOAD time, because tursoLoadData
+     does SELECT * across every table and rebuilds the whole object.
+   - The only hard ceiling left is this browser's localStorage quota (~5 MB
+     per origin). The app keeps TWO full copies of `data` there — the working
+     cache and the last-synced base used for three-way merges — plus Ask AI
+     chat and usage history. If that quota is hit, saveLocalCache() fails
+     silently and offline recovery stops working, so it is worth a gauge.
+   - Turso's own free-plan metering counts ROWS read and written. A full load
+     reads every row of every table, so the row total below is the number that
+     maps to that quota — not the kilobyte figures. */
 const SYNC_PERF_KEY = 'syncPerfHistory_v1';
 function loadSyncPerfHistory(){
   try{ const arr = JSON.parse(localStorage.getItem(SYNC_PERF_KEY)); return Array.isArray(arr) ? arr : []; }
@@ -3979,8 +4350,43 @@ const DB_HEALTH_TIERS = [
   { emoji:'\u{1F7E0}', label:'Growing' },
   { emoji:'\u{1F534}', label:'Large' }
 ];
+// Browsers give an origin roughly 5 MB of localStorage and count it in UTF-16
+// code units, so measure the same way rather than in UTF-8 bytes.
+const LOCAL_STORAGE_BUDGET = 5 * 1024 * 1024;
+function localStorageBytes(){
+  try{
+    let chars = 0;
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      chars += k.length + (localStorage.getItem(k) || '').length;
+    }
+    return chars * 2;
+  }catch(e){ return null; }
+}
+// Exactly what tursoLoadData pulls down on a cold start, table by table. This
+// is the unit Turso's plan limits are counted in.
+function rowsPerLoad(){
+  const s = data.settings || {};
+  const listRows = ['brands','materials','issueCategories','printerGroups','partCategories']
+    .reduce((n,k)=>n + (s[k] || []).length, 0) + (s.colors || []).length;
+  const barcodeRows = (records)=>Object.values(records || {}).reduce((n,r)=>n + (r.barcodes || []).length, 0);
+  return [
+    { label:'Filaments', count:Object.keys(data.skus).length },
+    { label:'Filament barcodes', count:barcodeRows(data.skus) },
+    { label:'Spare parts', count:Object.keys(data.parts).length },
+    { label:'Part barcodes', count:barcodeRows(data.parts) },
+    { label:'Activity events', count:data.events.length },
+    { label:'Printers', count:Object.keys(data.printers).length },
+    { label:'Printer log', count:data.printerLog.length },
+    { label:'Scan log', count:data.scanLog.length },
+    { label:'Parts scan log', count:data.partsScanLog.length },
+    { label:'Order history', count:data.orderLog.length },
+    { label:'Feedback', count:data.feedback.length },
+    { label:'Settings values', count:listRows + 3 }, // + the three app_settings rows
+    { label:'Bookkeeping', count:1 }                 // the revision row
+  ];
+}
 function computeDbHealth(){
-  const MB = 1024*1024;
   const totalBytes = measureBytes(data);
   const sections = [
     { label:'Activity Events', bytes: measureBytes(data.events) },
@@ -3998,26 +4404,22 @@ function computeDbHealth(){
   const largestPct = sectionsTotal ? (largest.bytes / sectionsTotal * 100) : 0;
 
   const avgSyncMs = averageSyncDuration();
+  const recordCounts = rowsPerLoad();
+  const totalRows = recordCounts.reduce((n,r)=>n+r.count, 0);
+  const cacheBytes = localStorageBytes();
+  const cachePct = cacheBytes === null ? 0 : (cacheBytes / LOCAL_STORAGE_BUDGET * 100);
 
-  const recordCounts = [
-    { label:'SKUs', count: Object.keys(data.skus).length },
-    { label:'Spare Parts', count: Object.keys(data.parts).length },
-    { label:'Activity Events', count: data.events.length },
-    { label:'Printer Logs', count: data.printerLog.length },
-    { label:'Scan Logs', count: data.scanLog.length },
-    { label:'Feedback', count: data.feedback.length },
-    { label:'Order History', count: data.orderLog.length }
-  ];
-
-  // Worst signal wins — a healthy size doesn't matter if syncing is slow,
-  // and vice versa. A single bloated section can flag "Good" even at a
-  // small total size, so a real problem is visible before it grows further.
-  const sizeTier = totalBytes < 2*MB ? 0 : totalBytes < 5*MB ? 1 : totalBytes < 10*MB ? 2 : 3;
+  // Worst signal wins — plenty of headroom doesn't matter if syncing is slow,
+  // and vice versa. The size tier tracks the browser cache rather than an
+  // absolute byte count, because that quota is the only hard ceiling left: a
+  // delta save costs the same whether `data` is 100 KB or 3 MB.
+  const cacheTier = cacheBytes === null ? 0 : cachePct < 40 ? 0 : cachePct < 60 ? 1 : cachePct < 80 ? 2 : 3;
   const syncTier = avgSyncMs === null ? 0 : avgSyncMs < 500 ? 0 : avgSyncMs < 1000 ? 1 : avgSyncMs < 2000 ? 2 : 3;
   const sectionTier = largestPct >= 70 ? 1 : 0;
-  const tier = Math.max(sizeTier, syncTier, sectionTier);
+  const tier = Math.max(cacheTier, syncTier, sectionTier);
 
-  return { totalBytes, sections, largest, largestPct, avgSyncMs, recordCounts, health: DB_HEALTH_TIERS[tier] };
+  return { totalBytes, sections, largest, largestPct, avgSyncMs, recordCounts, totalRows,
+           cacheBytes, cachePct, health: DB_HEALTH_TIERS[tier] };
 }
 function renderDbHealth(){
   const sizeEl = document.getElementById('dbSizeNum');
@@ -4025,7 +4427,11 @@ function renderDbHealth(){
   const h = computeDbHealth();
   document.getElementById('dbHealthNum').textContent = h.health.emoji + ' ' + h.health.label;
   sizeEl.textContent = formatBytes(h.totalBytes);
+  document.getElementById('dbRowsNum').textContent = h.totalRows.toLocaleString();
   document.getElementById('dbSyncNum').textContent = h.avgSyncMs === null ? '—' : (h.avgSyncMs/1000).toFixed(2) + ' sec';
+  document.getElementById('dbCacheNum').textContent = h.cacheBytes === null
+    ? '—'
+    : formatBytes(h.cacheBytes) + ' of 5 MB';
   document.getElementById('dbLargestNum').textContent = h.largest ? h.largest.label + ' (' + h.largestPct.toFixed(0) + '%)' : '—';
 
   const maxBytes = Math.max(1, ...h.sections.map(s=>s.bytes));
@@ -4040,7 +4446,11 @@ function renderDbHealth(){
     <div class="log-row">
       <div class="log-item" style="flex:2;color:var(--text);">${escapeHtml(r.label)}</div>
       <div style="width:100px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;">${r.count.toLocaleString()}</div>
-    </div>`).join('');
+    </div>`).join('') + `
+    <div class="log-row" style="border-top:1px solid var(--border);font-weight:700;">
+      <div class="log-item" style="flex:2;color:var(--text);">Rows read per full load</div>
+      <div style="width:100px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;">${h.totalRows.toLocaleString()}</div>
+    </div>`;
 }
 
 /* ---------- Render ---------- */
@@ -4257,7 +4667,12 @@ const QUICK_CHECK_KEY = 'quickCheckDaily_v1';
 const QUICK_CHECK_DAILY_LIMIT = 3;
 let quickCheckState = null;
 let quickCheckPendingEditId = null; // set only when the Edit modal was opened via Quick Check's "No"
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+// Local date, not UTC: this paces a daily nudge for whoever is at the screen,
+// so it should roll over at their midnight rather than in the early evening.
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function loadQuickCheckState(){
   let s = null;
   try{ s = JSON.parse(localStorage.getItem(QUICK_CHECK_KEY)); }catch(e){}
@@ -4350,7 +4765,9 @@ function quickCheckNo(id){
   editSku(id); // reuses the existing Edit modal — verification is applied on save, see saveEditModal()
 }
 function isUsageEvent(ev){
-  return ev.action === 'scan_out' || ev.action === 'scan_out_no_box' || ev.action === 'open_box';
+  // undo_scan_out carries a negative delta, so summing deltas across these
+  // actions nets an undone scan back out of every usage figure.
+  return ev.action === 'scan_out' || ev.action === 'scan_out_no_box' || ev.action === 'open_box' || ev.action === 'undo_scan_out';
 }
 let currentMostUsedRange = 30;
 function setMostUsedRange(days){
@@ -4582,7 +4999,7 @@ function renderReport(){
           return `
           <tr style="border-bottom:1px solid var(--border);">
             <td style="padding:6px 4px;">${escapeHtml(p.name)}</td>
-            <td style="padding:6px 4px;"><span class="status-badge ${p.status}">${statusLabel(p.status)}</span></td>
+            <td style="padding:6px 4px;"><span class="status-badge ${escapeHtml(p.status||'')}">${escapeHtml(statusLabel(p.status))}</span></td>
             <td style="padding:6px 4px;text-align:right;color:var(--text-muted);">${daysSinceServicedForReport(p.lastServicedAt)}</td>
             <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${issueCount}</td>
             <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${noteCount}</td>
@@ -4833,7 +5250,7 @@ function copyReorderReport(){
 const ACTION_LABELS = {
   scan_in:'Scanned in', scan_out:'Scanned out', scan_out_no_box:'Scanned out (no box)',
   sku_created:'Added filament', manual_add:'Added stock', adjust_box:'Adjusted boxes', adjust_loose:'Adjusted loose',
-  open_box:'Opened box', loose_consumed:'Spool used up', undo_scan:'Undone',
+  open_box:'Opened box', loose_consumed:'Spool used up', undo_scan:'Undone', undo_scan_out:'Undone (scan out)',
   part_scan_in:'Part scanned in', part_scan_out:'Part scanned out', part_created:'Added part',
   part_adjust:'Adjusted part qty', part_removed:'Removed part', part_import:'Imported parts', undo_part_scan:'Undone'
 };
@@ -4845,7 +5262,7 @@ function renderRecentLog(){
   document.getElementById('recentLogEmpty').style.display = events.length ? 'none' : 'block';
   list.innerHTML = events.map(ev=>{
     let name;
-    if(ev.partId !== undefined){
+    if(ev.partId !== null && ev.partId !== undefined){
       const part = data.parts[ev.partId];
       name = part ? partLabel(part) : '(removed part)';
     } else {
@@ -4860,7 +5277,7 @@ function renderRecentLog(){
       <div class="log-action">${ACTION_LABELS[ev.action] || ev.action}</div>
       <div class="log-item">${escapeHtml(name)}</div>
       <div class="log-delta">${ev.delta>0?'+':''}${ev.delta}</div>
-      <div class="log-source">${ev.source}</div>
+      <div class="log-source">${escapeHtml(ev.source||'')}</div>
     </div>`;
   }).join('');
   const moreBtn = document.getElementById('recentLogMoreBtn');
@@ -4926,7 +5343,7 @@ function addPrinterFromManageModal(){
   if(printerNameExists(name)){ toast('A printer named "' + name + '" already exists'); return; }
   const id = uid('printer');
   const maxOrder = Math.max(-1, ...Object.values(data.printers).map(p=>p.order||0));
-  data.printers[id] = { id, name, status:'operational', lastServicedAt:null, createdAt:Date.now(), order:maxOrder+1, group:'' };
+  data.printers[id] = { id, name, status:'operational', lastServicedAt:null, createdAt:Date.now(), updatedAt:Date.now(), order:maxOrder+1, group:'' };
   saveData();
   input.value = '';
   renderManagePrintersList();
@@ -5363,7 +5780,7 @@ function renderMaintenance(){
         <span class="printer-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
         <span class="drag-handle" title="Drag onto another tile to reorder or group">&#8942;&#8942;</span>
       </div>
-      <span class="status-badge ${p.status}">${statusLabel(p.status)}</span>
+      <span class="status-badge ${escapeHtml(p.status||'')}">${escapeHtml(statusLabel(p.status))}</span>
       <div class="printer-meta">Last serviced: ${daysAgoLabel(p.lastServicedAt)}</div>
       <select class="printer-status-select" onchange="setPrinterStatus('${jsStr(p.id)}', this.value)">
         <option value="operational" ${p.status==='operational'?'selected':''}>Operational</option>
@@ -5450,7 +5867,7 @@ function renderMasterPrinterLog(){
     <div class="log-row" style="align-items:flex-start;">
       <div class="log-time">${timeStr}</div>
       <div class="log-action">${p ? escapeHtml(p.name) : '(removed)'}</div>
-      <div class="log-item">${PRINTER_LOG_TYPE_LABELS[e.type] || e.type}${tag}${categoryTag}: <span class="log-note-text">${escapeHtml(e.text || '—')}</span>${fixLine}</div>
+      <div class="log-item">${escapeHtml(PRINTER_LOG_TYPE_LABELS[e.type] || e.type || '')}${tag}${categoryTag}: <span class="log-note-text">${escapeHtml(e.text || '—')}</span>${fixLine}</div>
       ${resolveBtn}
       <button class="icon-btn" style="margin-left:8px;" onclick="openEditPrinterLogModal('${jsStr(e.id)}')">Edit</button>
       <button class="icon-btn" style="margin-left:8px;" onclick="deletePrinterLogEntry('${jsStr(e.id)}')">Delete</button>
@@ -5526,7 +5943,7 @@ function renderPrinterReportSummary(){
         return `
         <tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px;">${escapeHtml(p.name)}</td>
-          <td style="padding:6px 4px;"><span class="status-badge ${p.status}">${statusLabel(p.status)}</span></td>
+          <td style="padding:6px 4px;"><span class="status-badge ${escapeHtml(p.status||'')}">${escapeHtml(statusLabel(p.status))}</span></td>
           <td style="padding:6px 4px;text-align:right;color:var(--text-muted);">${daysSinceServicedForReport(p.lastServicedAt)}</td>
           <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${issueCount}</td>
           <td style="padding:6px 4px;text-align:right;font-family:'IBM Plex Mono',monospace;">${noteCount}</td>
@@ -5710,7 +6127,9 @@ async function openPartModal(id, barcodePrefill){
   document.getElementById('p_mpn').value = p ? (p.mpn||'') : '';
   document.getElementById('p_category').value = p ? (p.category||'') : '';
   document.getElementById('p_models').value = p ? (p.models||'') : '';
-  document.getElementById('p_qty').value = p ? p.qty : (barcodePrefill && partsScanMode==='in' ? 1 : 1);
+  // A brand-new part starts at 1 either way: registering it from a scan-out
+  // still means one is on the bench in front of you.
+  document.getElementById('p_qty').value = p ? p.qty : 1;
   document.getElementById('p_location').value = p ? (p.location||'') : '';
   document.getElementById('p_threshold').value = p ? p.lowStockThreshold : 1;
   document.getElementById('p_threshold').disabled = p ? !!p.lowStockDisabled : false;
@@ -5791,7 +6210,7 @@ function savePartModal(){
     saveData(); renderAll(); closePartModal();
     showUndoBar('Updated ' + partLabel(p));
   } else {
-    const id = editingPartBarcodes[0] || uid('part');
+    const id = newRecordId(data.parts, editingPartBarcodes[0], 'part');
     const p = { id, ...fields, qty, createdAt: Date.now(), updatedAt: Date.now() };
     data.parts[id] = p;
     logPartEvent(id, 'part_created', qty, editingPartBarcodePrefill ? 'barcode' : 'manual');
@@ -6060,7 +6479,7 @@ function runPartsImport(){
       part.updatedAt = Date.now();
       updated++;
     } else {
-      const id = barcode || uid('part');
+      const id = newRecordId(data.parts, barcode, 'part');
       data.parts[id] = {
         id, barcodes: barcode ? [barcode] : [],
         name: name || ('Part ' + (mpn || barcode)),
@@ -6132,12 +6551,12 @@ function exportStockCSV(){
   toast('Stock CSV downloaded');
 }
 function exportEventsCSV(){
-  const rows = [['Date','Time','Action','Filament','Delta (boxes)','Source']];
+  const rows = [['Date','Time','Action','Item','Delta','Source']];
   [...data.events]
     .sort((a,b)=>a.timestamp-b.timestamp)
     .forEach(ev=>{
       let name;
-      if(ev.partId !== undefined){
+      if(ev.partId !== null && ev.partId !== undefined){
         const part = data.parts[ev.partId];
         name = part ? partLabel(part) : '(removed part)';
       } else {
@@ -6168,7 +6587,7 @@ function importData(event){
     try{
       const parsed = JSON.parse(e.target.result);
       if(!parsed.skus) throw new Error('bad shape');
-      if(confirm('Import will replace the shared data for everyone (it syncs to GitHub, not just this computer). Continue?')){
+      if(confirm('Import will replace the shared Turso data for everyone, not just this computer. Continue?')){
         ensureSettingsDefaults(parsed);
         data = parsed;
         saveData(); renderAll(); refreshAllDropdownSources();
@@ -6181,7 +6600,7 @@ function importData(event){
   event.target.value = '';
 }
 function clearAllData(){
-  const typed = prompt("This clears every filament and every scan in the shared data (it syncs to GitHub for everyone). This can't be undone.\n\nType DELETE to confirm:");
+  const typed = prompt("This clears every filament and every scan in the shared Turso database for everyone. This can't be undone.\n\nType DELETE to confirm:");
   if(typed !== 'DELETE') return;
   data = { skus:{}, events:[], settings:{} };
   ensureSettingsDefaults(data);
@@ -6205,30 +6624,34 @@ function resetAllLooseCounts(){
 
 /* ---------- Ask AI ----------
    A chat box wired to the Claude API. The API key lives ONLY in this browser's
-   localStorage (never in `data`, so it never syncs to GitHub or to other
+   localStorage (never in `data`, so it never syncs to Turso or to other
    people). Every question is sent with a fresh snapshot of the inventory,
    the printers, and whatever the current page is showing. */
 const ASKAI_CONFIG_KEY = 'askai_config_v1';
 const ASKAI_MODELS = {
   'claude-sonnet-5': 'Claude Sonnet 5',
   'claude-haiku-4-5': 'Claude Haiku 4.5',
-  'claude-opus-4-8': 'Claude Opus 4.8'
+  'claude-opus-5': 'Claude Opus 5'
 };
 let askAiConfig = {};
 try{ askAiConfig = JSON.parse(localStorage.getItem(ASKAI_CONFIG_KEY)) || {}; }catch(e){ askAiConfig = {}; }
 function saveAskAiConfig(){
   try{ localStorage.setItem(ASKAI_CONFIG_KEY, JSON.stringify(askAiConfig)); }catch(e){}
 }
-function askAiModel(){ return ASKAI_MODELS[askAiConfig.model] ? askAiConfig.model : 'claude-sonnet-5'; }
+// Anyone who had picked the previous Opus keeps an Opus, rather than being
+// quietly dropped to the default when that id leaves the picker.
+const ASKAI_MODEL_ALIASES = { 'claude-opus-4-8':'claude-opus-5', 'claude-opus-4-7':'claude-opus-5', 'claude-opus-4-6':'claude-opus-5' };
+function askAiModel(){
+  const picked = ASKAI_MODEL_ALIASES[askAiConfig.model] || askAiConfig.model;
+  return ASKAI_MODELS[picked] ? picked : 'claude-sonnet-5';
+}
 function hasAskAiKey(){ return !!(askAiConfig.key && askAiConfig.key.trim()); }
 
 /* ----- Extra context (shared) -----
    Unlike the API key, this is stored in `data.settings` and therefore syncs to
-   GitHub, so everyone using the same repo shares one set of background notes.
+   Turso, so everyone using the same database shares one set of background notes.
    Only two limits, both practical rather than arbitrary:
-     - HARD cap keeps the synced JSON file comfortably under GitHub's 1 MB
-       contents-API limit, which also carries the inventory and ~13 months of
-       activity log.
+     - HARD cap prevents accidentally sending an enormous document with every request.
      - SOFT threshold is just a cost heads-up: this text is sent with every
        request, and roughly 4 characters ≈ 1 input token. */
 const ASKAI_EXTRA_CONTEXT_MAX = 100000;
@@ -6263,8 +6686,10 @@ let currentChatId = 'chat_' + Date.now().toString(36);
 /* ----- Cost tracking (browser-only, never synced) -----
    List prices per 1M tokens: uncached input / output / cache write / cache read. */
 const ASKAI_PRICING = {
-  'claude-sonnet-5':  { in:3, out:15, cw:3.75, cr:0.30 },
+  'claude-sonnet-5':  { in:2, out:10, cw:2.50, cr:0.20 },
   'claude-haiku-4-5': { in:1, out:5,  cw:1.25, cr:0.10 },
+  'claude-opus-5':    { in:5, out:25, cw:6.25, cr:0.50 },
+  // Kept so cost history recorded under the previous flagship still prices correctly.
   'claude-opus-4-8':  { in:5, out:25, cw:6.25, cr:0.50 }
 };
 const ASKAI_USAGE_KEY = 'askai_usage_v1';
@@ -6519,8 +6944,8 @@ function saveAskAiExtraContext(){
   if(!data || !data.settings){ toast('Shared data is still loading — try again in a moment'); return; }
   const val = el.value.trim();
   if(val.length > ASKAI_EXTRA_CONTEXT_MAX){
-    toast('That\'s ' + val.length.toLocaleString() + ' characters. The shared file caps this at ' +
-          ASKAI_EXTRA_CONTEXT_MAX.toLocaleString() + ' so it stays under GitHub\'s 1 MB limit — trim it a bit.');
+    toast('That\'s ' + val.length.toLocaleString() + ' characters. This is capped at ' +
+          ASKAI_EXTRA_CONTEXT_MAX.toLocaleString() + ' because all of it is sent with every question — trim it a bit.');
     return;
   }
   if(val.length > ASKAI_EXTRA_CONTEXT_WARN &&
@@ -6530,9 +6955,9 @@ function saveAskAiExtraContext(){
   data.settings.aiExtraContextUpdatedAt = Date.now();
   el.value = val;
   askAiExtraContextShown = val;
-  saveData();            // writes the local cache and syncs to GitHub for everyone
+  saveData();            // writes the local cache and syncs to Turso for everyone
   updateAskAiExtraContextMeta();
-  toast(val ? 'Extra context saved — shared with everyone on this repo' : 'Extra context cleared for everyone');
+  toast(val ? 'Extra context saved — shared with everyone on this database' : 'Extra context cleared for everyone');
 }
 function updateAskAiPillVisibility(){
   const pill = document.getElementById('askAiPill');
@@ -6658,7 +7083,7 @@ function buildAskAiContext(){
       lines.push('=== RECENT FILAMENT ACTIVITY (newest first) ===');
       recent.forEach(e=>{
         const s = data.skus[e.skuId];
-        lines.push('- ' + new Date(e.timestamp).toLocaleDateString() + ' | ' + (e.type || '') + ' ' +
+        lines.push('- ' + new Date(e.timestamp).toLocaleDateString() + ' | ' + (ACTION_LABELS[e.action] || e.action || '') + ' ' +
           (e.delta > 0 ? '+' : '') + (e.delta != null ? e.delta : '') + ' | ' + (s ? skuLabel(s) : '(removed)'));
       });
       lines.push('');
@@ -7402,7 +7827,7 @@ function renderFeedbackList(){
         const timeStr = dt.toLocaleDateString(undefined,{month:'short',day:'numeric'});
         return `
         <div class="fb-item">
-          <span class="fb-type-tag ${f.type}">${f.type === 'bug' ? 'Bug' : 'Feature'}</span>
+          <span class="fb-type-tag ${escapeHtml(f.type||'')}">${f.type === 'bug' ? 'Bug' : 'Feature'}</span>
           <div class="fb-text">${escapeHtml(f.text)}<div class="fb-time">${timeStr}</div></div>
           <button class="remove-x" onclick="removeFeedbackItem('${jsStr(f.id)}')" title="Remove">&times;</button>
         </div>`;

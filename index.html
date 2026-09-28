@@ -837,7 +837,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.26</div>
+    <div class="sub">V0.28</div>
   </div>
 </header>
 
@@ -1260,24 +1260,24 @@
 
   <div class="tab-panel" data-tab="settings">
     <section>
-      <h2>Turso Sync</h2>
+      <h2>Database Sync</h2>
       <p class="footer-note" style="margin-top:0;margin-bottom:10px;" id="ghSyncStatusText">Not connected.</p>
       <div class="footer-row">
         <button class="btn" onclick="manualGhSync()">Sync now</button>
-        <button class="btn" onclick="openGhConnectionModal()">Change Turso connection</button>
+        <button class="btn" onclick="openGhConnectionModal()">Change database connection</button>
       </div>
     </section>
     <section>
       <h2>Share access</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Generates a link with the Turso database URL and token already filled in. Opening it on a browser that is not connected yet connects automatically.</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Generates a link with the database URL and token already filled in. Opening it on a browser that is not connected yet connects automatically.</p>
       <div class="footer-row">
-        <button class="btn" onclick="copyGhShareLink()">Copy Turso share link</button>
+        <button class="btn" onclick="copyGhShareLink()">Copy database share link</button>
       </div>
       <p class="footer-note" style="margin-bottom:0;">The Base64-encoded link still carries the token as a secret — treat it like a password. Prefer a separate database-scoped token per person so access can be revoked independently.</p>
     </section>
     <section>
       <h2>Ask AI (Claude)</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Powers the "Ask AI" button in the bottom-right corner. Get a key from <span style="font-family:'IBM Plex Mono',monospace;">console.anthropic.com</span> &rarr; API Keys. The key is stored only in this browser and is <strong>never</strong> synced to Turso or shared — each device needs its own. Usage is billed to your Anthropic account (a typical question costs well under a cent).</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">Powers the "Ask AI" button in the bottom-right corner. Get a key from <span style="font-family:'IBM Plex Mono',monospace;">console.anthropic.com</span> &rarr; API Keys. The key is stored only in this browser and is <strong>never</strong> synced to the database or shared — each device needs its own. Usage is billed to your Anthropic account (a typical question costs well under a cent).</p>
       <div id="askAiKeyState"></div>
       <div class="field" style="margin-top:12px;">
         <label>Model</label>
@@ -1316,7 +1316,7 @@
         <button class="btn" onclick="document.getElementById('importFile').click()">Import backup</button>
         <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
       </div>
-      <p class="footer-note">The shared copy lives in normalized SQL tables in Turso. This browser also keeps a local fallback copy in case Turso is briefly unreachable — export a JSON backup periodically for extra safety.</p>
+      <p class="footer-note">The shared copy lives in normalized tables in the shared database. This browser also keeps a local fallback copy in case the database is briefly unreachable — export a JSON backup periodically for extra safety.</p>
       <details style="margin-top:14px;">
         <summary style="cursor:pointer;color:var(--text-muted);font-size:12.5px;">Danger zone</summary>
         <div class="footer-row" style="margin-top:10px;">
@@ -1334,7 +1334,7 @@
     </section>
     <section>
       <h2>Database Health</h2>
-      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How much data this browser is holding, how many rows a cold load pulls from Turso, and how the last few syncs have performed — all calculated from the copy already in memory, with no extra requests.</p>
+      <p class="footer-note" style="margin-top:0;margin-bottom:10px;">How much data this browser is holding, how many rows a cold load pulls from the database, and how the last few syncs have performed — all calculated from the copy already in memory, with no extra requests.</p>
       <div class="stat-strip" style="flex-wrap:wrap;margin-bottom:14px;">
         <div class="stat-item"><div class="num" id="dbHealthNum" style="font-size:16px;">—</div><div class="label" id="dbHealthWhy">Health</div></div>
         <div class="stat-item"><div class="num" id="dbSizeNum">—</div><div class="label">Loaded data</div></div>
@@ -1346,9 +1346,9 @@
       <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:0 0 8px;">What's using the space</h3>
       <div id="dbBreakdownList"></div>
       <p class="footer-note" style="margin:8px 0 0;">Sizes are of the in-memory copy, which is what gets cached in this browser and what a cold load has to rebuild. Saving a change only writes the rows that actually changed, so this figure does not affect how long a scan takes to sync.</p>
-      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Rows in Turso</h3>
+      <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:16px 0 8px;">Rows in the database</h3>
       <div id="dbRecordCountsList"></div>
-      <p class="footer-note" style="margin:8px 0 0;">Opening the app reads every one of these rows. Turso's plan limits are counted in rows read and written, so this total — not the kilobytes above — is the number that maps to your quota. The browser cache figure is this browser's local copy measured against the quota it reports: two full copies of the data (the working cache, plus the last-synced base used to merge changes from other devices) alongside Ask AI chat and usage history. Chromium browsers allow gigabytes here; Safari caps it near 5 MB, which is the figure shown with an asterisk when a browser won't report its own limit.</p>
+      <p class="footer-note" style="margin:8px 0 0;">Opening the app reads every one of these rows. Database plan limits are counted in rows read and written, so this total — not the kilobytes above — is the number that maps to your quota. The browser cache figure is this browser's local copy measured against the quota it reports: two full copies of the data (the working cache, plus the last-synced base used to merge changes from other devices) alongside Ask AI chat and usage history. Chromium browsers allow gigabytes here; Safari caps it near 5 MB, which is the figure shown with an asterisk when a browser won't report its own limit.</p>
     </section>
   </div>
 
@@ -1619,7 +1619,7 @@
   <button onclick="refreshFromGithub()">Refresh</button>
 </div>
 
-<div id="syncIndicator" onclick="manualGhSync()" title="Click to check Turso for updates">
+<div id="syncIndicator" onclick="manualGhSync()" title="Click to check the database for updates">
   <span class="sync-dot" id="syncIndicatorDot"></span>
   <span id="syncIndicatorText">Not connected</span>
 </div>
@@ -1691,13 +1691,29 @@
 <div class="gh-gate" id="ghGateScreen">
   <div class="gh-gate-card">
     <h1>3D PRINTER FILAMENT INVENTORY</h1>
-    <div class="gh-gate-sub">Shared data lives in your Turso SQL database. Credentials stay in this browser.</div>
+    <div class="gh-gate-sub">Shared data lives in your database. Credentials stay in this browser.</div>
     <div id="ghGateBody"></div>
   </div>
 </div>
 
 <script>
-const STORAGE_KEY = 'filamentLog_turso_v1';
+// Local storage keys were renamed to vendor-neutral names in V0.27. This
+// one-time copy keeps existing browsers on their cached data and saved
+// credentials instead of forcing a re-connect; it can be deleted once every
+// device has opened the app at least once on V0.27 or later.
+(function migrateLegacyStorageKeys(){
+  const moves = [['filamentLog_turso_v1','filamentLog_db_v1'],
+                 ['filamentLog_turso_v1_base','filamentLog_db_v1_base'],
+                 ['filamentLog_turso_v1_dirty','filamentLog_db_v1_dirty'],
+                 ['turso_sync_config_v1','db_sync_config_v1']];
+  try{
+    moves.forEach(([from,to])=>{
+      const legacy = localStorage.getItem(from);
+      if(legacy !== null && localStorage.getItem(to) === null) localStorage.setItem(to, legacy);
+    });
+  }catch(e){}
+})();
+const STORAGE_KEY = 'filamentLog_db_v1';
 let currentMode = 'out';
 let currentMaterialFilterFamily = '';
 let selectedSkuIds = new Set();
@@ -1935,7 +1951,7 @@ function dedupeBarcodes(records){
 }
 function ensureSettingsDefaults(d){
   if(!d.settings) d.settings = {};
-  // SQL NULL is how Turso represents an older JSON property that did not
+  // SQL NULL is how the database represents an older JSON property that did not
   // exist. Treat null and undefined alike when backfilling legacy records so
   // a SQL round trip cannot suppress a default that the JSON loader applied.
   if(d.settings.defaultThreshold === undefined || d.settings.defaultThreshold === null || !Number.isFinite(Number(d.settings.defaultThreshold))) d.settings.defaultThreshold = 2;
@@ -2016,7 +2032,7 @@ function ensureSettingsDefaults(d){
   // A barcode identifies exactly one record, and the SQL tables enforce that
   // with a UNIQUE index. The UI blocks duplicates, but a three-way merge can
   // still union two devices that each claimed the same code — left alone, the
-  // write would silently drop one side's row in Turso while this browser kept
+  // write would silently drop one side's row in the database while this browser kept
   // showing both, and the two copies would never agree again. Resolve it here
   // instead: oldest record keeps the code, and scanning it stays predictable.
   dedupeBarcodes(d.skus);
@@ -2081,7 +2097,7 @@ function saveLocalCache(){
     if(!localCacheQuotaWarned){
       localCacheQuotaWarned = true;
       toast("This browser is out of local storage, so your changes can't be cached here. " +
-            "They still sync to Turso, but unsynced edits would be lost if the tab closed offline. " +
+            "They still sync to the database, but unsynced edits would be lost if the tab closed offline. " +
             "Clearing Ask AI chat history in Settings frees the most space.", 12000);
     }
     return false;
@@ -2096,8 +2112,8 @@ function freshDataSkeleton(){
   return fresh;
 }
 
-/* ---------- Turso SQL Sync ---------- */
-const GH_CONFIG_KEY = 'turso_sync_config_v1';
+/* ---------- Remote SQL Sync ---------- */
+const GH_CONFIG_KEY = 'db_sync_config_v1';
 let ghConfig = {};
 try{ ghConfig = JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || {}; }catch(e){ ghConfig = {}; }
 let ghSha = null;
@@ -2131,7 +2147,9 @@ function saveGhConfigToStorage(){
 }
 function ghApiUrl(){
   let url = String(ghConfig.url || '').trim().replace(/\/+$/, '');
-  url = url.replace(/^libsql:\/\//i, 'https://').replace(/^turso:\/\//i, 'https://');
+  // The endpoint may be given with any driver-specific scheme; the HTTP API
+  // is always reached over https, so normalize whatever scheme was entered.
+  url = url.replace(/^[a-z][a-z0-9+.\-]*:\/\//i, 'https://');
   return url + '/v2/pipeline';
 }
 function utf8ToBase64(str){
@@ -2147,7 +2165,7 @@ function base64ToUtf8(b64){
   return new TextDecoder().decode(bytes);
 }
 
-const TURSO_SCHEMA = [
+const DB_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS setting_values (kind TEXT NOT NULL, value TEXT NOT NULL, color_hex TEXT, sort_order INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(kind,value))`,
@@ -2168,7 +2186,7 @@ const TURSO_SCHEMA = [
   `INSERT OR IGNORE INTO app_meta(key,value) VALUES('revision','0')`
 ];
 
-function tursoArg(value){
+function dbArg(value){
   if(value === null || value === undefined) return { type:'null' };
   if(typeof value === 'boolean') return { type:'integer', value:value ? '1' : '0' };
   if(typeof value === 'number'){
@@ -2177,24 +2195,24 @@ function tursoArg(value){
   }
   return { type:'text', value:String(value) };
 }
-function tursoStatement(sql, args){
+function dbStatement(sql, args){
   const stmt = { sql };
-  if(args && args.length) stmt.args = args.map(tursoArg);
+  if(args && args.length) stmt.args = args.map(dbArg);
   return { type:'execute', stmt };
 }
-function tursoPipelineUrl(baseUrl){
+function dbPipelineUrl(baseUrl){
   if(!baseUrl) return ghApiUrl();
   return String(baseUrl);
 }
-async function tursoPipeline(requests, baton, baseUrl){
+async function dbPipeline(requests, baton, baseUrl){
   let res;
   try{
-    res = await fetch(tursoPipelineUrl(baseUrl), {
+    res = await fetch(dbPipelineUrl(baseUrl), {
       method:'POST',
       headers:{ 'Authorization':'Bearer ' + ghConfig.token, 'Content-Type':'application/json' },
       body:JSON.stringify(baton ? { baton, requests } : { requests })
     });
-  }catch(networkErr){ const err = new Error('Network error reaching Turso'); err.type='network'; throw err; }
+  }catch(networkErr){ const err = new Error('Network error reaching the database'); err.type='network'; throw err; }
   if(!res.ok){
     let serverDetail='';
     try{
@@ -2205,7 +2223,7 @@ async function tursoPipeline(requests, baton, baseUrl){
       }catch(ignore){ serverDetail=raw; }
     }catch(ignore){}
     serverDetail=String(serverDetail||'').replace(/\s+/g,' ').trim().slice(0,180);
-    const message='Turso HTTP error '+res.status+(serverDetail ? ': '+serverDetail : '');
+    const message='Database HTTP error '+res.status+(serverDetail ? ': '+serverDetail : '');
     const err=new Error(message);
     err.type=(res.status===401||res.status===403)?'auth':'other';
     throw err;
@@ -2213,24 +2231,24 @@ async function tursoPipeline(requests, baton, baseUrl){
   const body = await res.json();
   const failed = (body.results || []).find(r=>r.type === 'error');
   if(failed){
-    const detail = failed.error && (failed.error.message || failed.error.code) || 'SQL request failed';
+    const detail = failed.error && (failed.error.message || failed.error.code) || 'Database request failed';
     const err = new Error(detail);
     err.type = /auth|permission|not authorized|forbidden/i.test(detail) ? 'auth' : 'sql';
     // The stream survives a failed statement, and the response still carries
     // the next baton — hand it to the caller so an open transaction can be
-    // rolled back immediately instead of holding Turso's write lock until the
+    // rolled back immediately instead of holding the database's write lock until the
     // server times the connection out.
     err.body = body;
     throw err;
   }
   return body;
 }
-function tursoExecuteResult(body, index){
+function dbExecuteResult(body, index){
   const item = body && body.results && body.results[index || 0];
   return item && item.response && item.response.result;
 }
-function tursoRows(body, index){
-  const result = tursoExecuteResult(body, index);
+function dbRows(body, index){
+  const result = dbExecuteResult(body, index);
   if(!result) return [];
   const names = (result.cols || []).map(c=>c.name);
   return (result.rows || []).map(row=>{
@@ -2243,8 +2261,8 @@ function tursoRows(body, index){
     return out;
   });
 }
-async function tursoEnsureSchema(){
-  // Every statement in TURSO_SCHEMA is CREATE ... IF NOT EXISTS or INSERT OR
+async function dbEnsureSchema(){
+  // Every statement in DB_SCHEMA is CREATE ... IF NOT EXISTS or INSERT OR
   // IGNORE, so running the whole thing on every connect is a no-op against a
   // healthy database and silently repairs one that is missing a table, an
   // index, or the app_meta bookkeeping rows. That matters because a missing
@@ -2252,129 +2270,129 @@ async function tursoEnsureSchema(){
   // and other devices would stop seeing updates. Bundling the version read and
   // the column checks into the same pipeline keeps this to one round trip.
   const reads = [
-    tursoStatement("SELECT value FROM app_meta WHERE key='schema_version'"),
-    tursoStatement('PRAGMA table_info(sku_barcodes)'),
-    tursoStatement('PRAGMA table_info(part_barcodes)')
+    dbStatement("SELECT value FROM app_meta WHERE key='schema_version'"),
+    dbStatement('PRAGMA table_info(sku_barcodes)'),
+    dbStatement('PRAGMA table_info(part_barcodes)')
   ];
-  const bootstrap = TURSO_SCHEMA.map(sql=>tursoStatement(sql));
+  const bootstrap = DB_SCHEMA.map(sql=>dbStatement(sql));
   let versionIdx = bootstrap.length;
   let info;
   try{
-    info = await tursoPipeline(bootstrap.concat(reads, {type:'close'}));
+    info = await dbPipeline(bootstrap.concat(reads, {type:'close'}));
   }catch(err){
     // A token without write access can still open the app read-only; only the
     // repair half needs those rights. Re-read on its own so a viewer sees the
     // inventory instead of a connection error.
     if(err.type === 'auth' || err.type === 'network') throw err;
     versionIdx = 0;
-    info = await tursoPipeline(reads.concat({type:'close'}));
+    info = await dbPipeline(reads.concat({type:'close'}));
   }
-  const versionRow = tursoRows(info,versionIdx)[0];
+  const versionRow = dbRows(info,versionIdx)[0];
   const schemaVersion = versionRow ? (parseInt(versionRow.value,10) || 0) : 0;
   // Verify physical columns even when the version row says v2: a remote
   // pipeline can be interrupted between DDL statements, and the next launch
   // must be able to finish that partial migration.
-  const skuOrderMissing = !tursoRows(info,versionIdx+1).some(c=>c.name==='sort_order');
-  const partOrderMissing = !tursoRows(info,versionIdx+2).some(c=>c.name==='sort_order');
+  const skuOrderMissing = !dbRows(info,versionIdx+1).some(c=>c.name==='sort_order');
+  const partOrderMissing = !dbRows(info,versionIdx+2).some(c=>c.name==='sort_order');
   if(schemaVersion < 2 || skuOrderMissing || partOrderMissing){
     // v1 stored barcode membership but not array position. Add an explicit
     // order so a save/reload cannot silently change which barcode is shown as
     // the primary one. PRAGMA checks make this safe if a prior migration was
     // interrupted after only one ALTER TABLE completed.
     const migration = [];
-    if(skuOrderMissing) migration.push(tursoStatement('ALTER TABLE sku_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
-    if(partOrderMissing) migration.push(tursoStatement('ALTER TABLE part_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
+    if(skuOrderMissing) migration.push(dbStatement('ALTER TABLE sku_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
+    if(partOrderMissing) migration.push(dbStatement('ALTER TABLE part_barcodes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'));
     // Existing v1 rows were inserted in JSON array order. Capture that rowid
     // order before future replacements start maintaining sort_order directly.
-    if(schemaVersion < 2 || skuOrderMissing) migration.push(tursoStatement('UPDATE sku_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM sku_barcodes AS earlier WHERE earlier.sku_id=sku_barcodes.sku_id AND earlier.rowid<=sku_barcodes.rowid)'));
-    if(schemaVersion < 2 || partOrderMissing) migration.push(tursoStatement('UPDATE part_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM part_barcodes AS earlier WHERE earlier.part_id=part_barcodes.part_id AND earlier.rowid<=part_barcodes.rowid)'));
-    migration.push(tursoStatement("INSERT INTO app_meta(key,value) VALUES('schema_version','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value"),{type:'close'});
-    await tursoPipeline(migration);
+    if(schemaVersion < 2 || skuOrderMissing) migration.push(dbStatement('UPDATE sku_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM sku_barcodes AS earlier WHERE earlier.sku_id=sku_barcodes.sku_id AND earlier.rowid<=sku_barcodes.rowid)'));
+    if(schemaVersion < 2 || partOrderMissing) migration.push(dbStatement('UPDATE part_barcodes SET sort_order=(SELECT COUNT(*)-1 FROM part_barcodes AS earlier WHERE earlier.part_id=part_barcodes.part_id AND earlier.rowid<=part_barcodes.rowid)'));
+    migration.push(dbStatement("INSERT INTO app_meta(key,value) VALUES('schema_version','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value"),{type:'close'});
+    await dbPipeline(migration);
   }
 }
-function tursoBool(v){ return !!Number(v); }
-function tursoInsertMany(requests, table, columns, rows, replace){
+function dbBool(v){ return !!Number(v); }
+function dbInsertMany(requests, table, columns, rows, replace){
   const size = 80;
   for(let start=0; start<rows.length; start+=size){
     const batch = rows.slice(start,start+size);
     const tuple = '(' + columns.map(()=>'?').join(',') + ')';
-    requests.push(tursoStatement(
+    requests.push(dbStatement(
       `${replace ? 'INSERT OR REPLACE' : 'INSERT'} INTO ${table} (${columns.join(',')}) VALUES ${batch.map(()=>tuple).join(',')}`,
       batch.flat()
     ));
   }
 }
-function tursoRecordMap(value){
+function dbRecordMap(value){
   if(Array.isArray(value)) return Object.fromEntries(value.filter(x=>x&&x.id).map(x=>[x.id,x]));
   return value || {};
 }
-function tursoSyncTable(q, table, columns, beforeValue, afterValue, rowFn){
-  const before = tursoRecordMap(beforeValue), after = tursoRecordMap(afterValue);
+function dbSyncTable(q, table, columns, beforeValue, afterValue, rowFn){
+  const before = dbRecordMap(beforeValue), after = dbRecordMap(afterValue);
   const removed = Object.keys(before).filter(id=>!after[id]);
   for(let i=0;i<removed.length;i+=200){
     const ids=removed.slice(i,i+200);
-    q.push(tursoStatement(`DELETE FROM ${table} WHERE id IN (${ids.map(()=>'?').join(',')})`,ids));
+    q.push(dbStatement(`DELETE FROM ${table} WHERE id IN (${ids.map(()=>'?').join(',')})`,ids));
   }
   const changed = Object.keys(after).filter(id=>!before[id] || JSON.stringify(before[id])!==JSON.stringify(after[id])).map(id=>after[id]);
-  tursoInsertMany(q,table,columns,changed.map(rowFn),true);
+  dbInsertMany(q,table,columns,changed.map(rowFn),true);
   return { changed, removed };
 }
-function tursoDeltaRequests(before, d){
+function dbDeltaRequests(before, d){
   const q=[], b=before||freshDataSkeleton();
   const skuCols=['id','brand','material','color_name','color_hex','box_count','loose_count','low_stock_threshold','low_stock_disabled','target_stock','weight_per_box_kg','purchase_url','location','notes','favorite','ordered','ordered_at','low_since','last_verified_at','verify_count','created_at','updated_at'];
-  const skuChange=tursoSyncTable(q,'skus',skuCols,b.skus,d.skus,s=>[s.id,s.brand||'',s.material||'',s.colorName||'',s.colorHex||'#808080',s.boxCount||0,s.looseCount||0,s.lowStockThreshold||0,!!s.lowStockDisabled,s.targetStock,s.weightPerBoxKg||1,s.purchaseUrl||'',s.location||'',s.notes||'',!!s.favorite,!!s.ordered,s.orderedAt,s.lowSince,s.lastVerifiedAt,s.verifyCount||0,s.createdAt||Date.now(),s.updatedAt||s.createdAt||Date.now()]);
+  const skuChange=dbSyncTable(q,'skus',skuCols,b.skus,d.skus,s=>[s.id,s.brand||'',s.material||'',s.colorName||'',s.colorHex||'#808080',s.boxCount||0,s.looseCount||0,s.lowStockThreshold||0,!!s.lowStockDisabled,s.targetStock,s.weightPerBoxKg||1,s.purchaseUrl||'',s.location||'',s.notes||'',!!s.favorite,!!s.ordered,s.orderedAt,s.lowSince,s.lastVerifiedAt,s.verifyCount||0,s.createdAt||Date.now(),s.updatedAt||s.createdAt||Date.now()]);
   const skuBarcodeIds=skuChange.changed.map(s=>s.id).concat(skuChange.removed);
-  for(let i=0;i<skuBarcodeIds.length;i+=200){ const ids=skuBarcodeIds.slice(i,i+200); q.unshift(tursoStatement(`DELETE FROM sku_barcodes WHERE sku_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
-  tursoInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skuChange.changed.flatMap(s=>(s.barcodes||[]).map((code,i)=>[s.id,code,i])),true);
+  for(let i=0;i<skuBarcodeIds.length;i+=200){ const ids=skuBarcodeIds.slice(i,i+200); q.unshift(dbStatement(`DELETE FROM sku_barcodes WHERE sku_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
+  dbInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skuChange.changed.flatMap(s=>(s.barcodes||[]).map((code,i)=>[s.id,code,i])),true);
 
   const partCols=['id','name','mpn','category','models','description','notes','location','purchase_url','qty','low_stock_threshold','low_stock_disabled','target_stock','ordered','ordered_at','low_since','created_at','updated_at'];
-  const partChange=tursoSyncTable(q,'parts',partCols,b.parts,d.parts,p=>[p.id,p.name||'',p.mpn||'',p.category||'Other',p.models||'',p.description||'',p.notes||'',p.location||'',p.purchaseUrl||'',p.qty||0,p.lowStockThreshold||0,!!p.lowStockDisabled,p.targetStock,!!p.ordered,p.orderedAt,p.lowSince,p.createdAt||Date.now(),p.updatedAt||p.createdAt||Date.now()]);
+  const partChange=dbSyncTable(q,'parts',partCols,b.parts,d.parts,p=>[p.id,p.name||'',p.mpn||'',p.category||'Other',p.models||'',p.description||'',p.notes||'',p.location||'',p.purchaseUrl||'',p.qty||0,p.lowStockThreshold||0,!!p.lowStockDisabled,p.targetStock,!!p.ordered,p.orderedAt,p.lowSince,p.createdAt||Date.now(),p.updatedAt||p.createdAt||Date.now()]);
   const partBarcodeIds=partChange.changed.map(p=>p.id).concat(partChange.removed);
-  for(let i=0;i<partBarcodeIds.length;i+=200){ const ids=partBarcodeIds.slice(i,i+200); q.unshift(tursoStatement(`DELETE FROM part_barcodes WHERE part_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
-  tursoInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],partChange.changed.flatMap(p=>(p.barcodes||[]).map((code,i)=>[p.id,code,i])),true);
+  for(let i=0;i<partBarcodeIds.length;i+=200){ const ids=partBarcodeIds.slice(i,i+200); q.unshift(dbStatement(`DELETE FROM part_barcodes WHERE part_id IN (${ids.map(()=>'?').join(',')})`,ids)); }
+  dbInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],partChange.changed.flatMap(p=>(p.barcodes||[]).map((code,i)=>[p.id,code,i])),true);
 
-  tursoSyncTable(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],b.events,d.events,e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]);
-  tursoSyncTable(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],b.scanLog,d.scanLog,e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]);
-  tursoSyncTable(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],b.printers,d.printers,p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]);
-  tursoSyncTable(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],b.printerLog,d.printerLog,e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]);
-  tursoSyncTable(q,'feedback',['id','type','text','timestamp'],b.feedback,d.feedback,e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]);
-  tursoSyncTable(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],b.orderLog,d.orderLog,o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]);
-  tursoSyncTable(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],b.partsScanLog,d.partsScanLog,e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]);
+  dbSyncTable(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],b.events,d.events,e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]);
+  dbSyncTable(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],b.scanLog,d.scanLog,e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]);
+  dbSyncTable(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],b.printers,d.printers,p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]);
+  dbSyncTable(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],b.printerLog,d.printerLog,e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]);
+  dbSyncTable(q,'feedback',['id','type','text','timestamp'],b.feedback,d.feedback,e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]);
+  dbSyncTable(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],b.orderLog,d.orderLog,o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]);
+  dbSyncTable(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],b.partsScanLog,d.partsScanLog,e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]);
 
   if(JSON.stringify(b.settings||{})!==JSON.stringify(d.settings||{})){
-    q.push(tursoStatement('DELETE FROM app_settings'),tursoStatement('DELETE FROM setting_values'));
+    q.push(dbStatement('DELETE FROM app_settings'),dbStatement('DELETE FROM setting_values'));
     const s=d.settings||{};
-    tursoInsertMany(q,'app_settings',['key','value','updated_at'],[['defaultThreshold',String(s.defaultThreshold===undefined?2:s.defaultThreshold),0],['aiExtraContext',s.aiExtraContext||'',s.aiExtraContextUpdatedAt||0],['seedBambuColorsV2',s.seedBambuColorsV2?'1':'0',0]],true);
+    dbInsertMany(q,'app_settings',['key','value','updated_at'],[['defaultThreshold',String(s.defaultThreshold===undefined?2:s.defaultThreshold),0],['aiExtraContext',s.aiExtraContext||'',s.aiExtraContextUpdatedAt||0],['seedBambuColorsV2',s.seedBambuColorsV2?'1':'0',0]],true);
     const listRows=[], lists={brands:s.brands||[],materials:s.materials||[],issueCategories:s.issueCategories||[],printerGroups:s.printerGroups||[],partCategories:s.partCategories||[]};
     Object.keys(lists).forEach(kind=>lists[kind].forEach((value,i)=>listRows.push([kind,value,null,i])));
     (s.colors||[]).forEach((c,i)=>listRows.push(['colors',c.name,c.hex,i]));
-    tursoInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows,true);
+    dbInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows,true);
   }
   return q;
 }
-function tursoResetRequests(d){
+function dbResetRequests(d){
   const q = [];
-  ['sku_barcodes','part_barcodes','inventory_events','scan_log','printer_log','feedback','orders','part_scan_log','skus','parts','printers','setting_values','app_settings'].forEach(t=>q.push(tursoStatement('DELETE FROM ' + t)));
+  ['sku_barcodes','part_barcodes','inventory_events','scan_log','printer_log','feedback','orders','part_scan_log','skus','parts','printers','setting_values','app_settings'].forEach(t=>q.push(dbStatement('DELETE FROM ' + t)));
   const skus = Object.values(d.skus || {});
-  tursoInsertMany(q,'skus',['id','brand','material','color_name','color_hex','box_count','loose_count','low_stock_threshold','low_stock_disabled','target_stock','weight_per_box_kg','purchase_url','location','notes','favorite','ordered','ordered_at','low_since','last_verified_at','verify_count','created_at','updated_at'],skus.map(s=>[
+  dbInsertMany(q,'skus',['id','brand','material','color_name','color_hex','box_count','loose_count','low_stock_threshold','low_stock_disabled','target_stock','weight_per_box_kg','purchase_url','location','notes','favorite','ordered','ordered_at','low_since','last_verified_at','verify_count','created_at','updated_at'],skus.map(s=>[
     s.id,s.brand||'',s.material||'',s.colorName||'',s.colorHex||'#808080',s.boxCount||0,s.looseCount||0,s.lowStockThreshold||0,!!s.lowStockDisabled,s.targetStock,s.weightPerBoxKg||1,s.purchaseUrl||'',s.location||'',s.notes||'',!!s.favorite,!!s.ordered,s.orderedAt,s.lowSince,s.lastVerifiedAt,s.verifyCount||0,s.createdAt||Date.now(),s.updatedAt||s.createdAt||Date.now()
   ]));
-  tursoInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skus.flatMap(s=>(s.barcodes||[]).map((b,i)=>[s.id,b,i])));
+  dbInsertMany(q,'sku_barcodes',['sku_id','barcode','sort_order'],skus.flatMap(s=>(s.barcodes||[]).map((b,i)=>[s.id,b,i])));
   const parts = Object.values(d.parts || {});
-  tursoInsertMany(q,'parts',['id','name','mpn','category','models','description','notes','location','purchase_url','qty','low_stock_threshold','low_stock_disabled','target_stock','ordered','ordered_at','low_since','created_at','updated_at'],parts.map(p=>[
+  dbInsertMany(q,'parts',['id','name','mpn','category','models','description','notes','location','purchase_url','qty','low_stock_threshold','low_stock_disabled','target_stock','ordered','ordered_at','low_since','created_at','updated_at'],parts.map(p=>[
     p.id,p.name||'',p.mpn||'',p.category||'Other',p.models||'',p.description||'',p.notes||'',p.location||'',p.purchaseUrl||'',p.qty||0,p.lowStockThreshold||0,!!p.lowStockDisabled,p.targetStock,!!p.ordered,p.orderedAt,p.lowSince,p.createdAt||Date.now(),p.updatedAt||p.createdAt||Date.now()
   ]));
-  tursoInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],parts.flatMap(p=>(p.barcodes||[]).map((b,i)=>[p.id,b,i])));
-  tursoInsertMany(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],(d.events||[]).map(e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]));
-  tursoInsertMany(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],(d.scanLog||[]).map(e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]));
+  dbInsertMany(q,'part_barcodes',['part_id','barcode','sort_order'],parts.flatMap(p=>(p.barcodes||[]).map((b,i)=>[p.id,b,i])));
+  dbInsertMany(q,'inventory_events',['id','sku_id','part_id','action','delta','source','sample','timestamp'],(d.events||[]).map(e=>[e.id,e.skuId,e.partId,e.action||'',e.delta||0,e.source||'',!!e.sample,e.timestamp||0]));
+  dbInsertMany(q,'scan_log',['id','timestamp','sku_id','label','delta','action_label','source','reverse_box_count','reverse_loose_count','undone'],(d.scanLog||[]).map(e=>[e.id,e.timestamp||0,e.skuId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.boxCount||0,e.reverse&&e.reverse.looseCount||0,!!e.undone]));
   const printers = Object.values(d.printers || {});
-  tursoInsertMany(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],printers.map(p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]));
-  tursoInsertMany(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],(d.printerLog||[]).map(e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]));
-  tursoInsertMany(q,'feedback',['id','type','text','timestamp'],(d.feedback||[]).map(e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]));
-  tursoInsertMany(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],(d.orderLog||[]).map(o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]));
-  tursoInsertMany(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],(d.partsScanLog||[]).map(e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]));
+  dbInsertMany(q,'printers',['id','name','status','group_name','sort_order','last_serviced_at','created_at','updated_at'],printers.map(p=>[p.id,p.name||'',p.status||'operational',p.group||'',p.order||0,p.lastServicedAt,p.createdAt||Date.now(),p.updatedAt||p.createdAt||0]));
+  dbInsertMany(q,'printer_log',['id','printer_id','type','text','category','fix_text','timestamp','resolved','resolved_at'],(d.printerLog||[]).map(e=>[e.id,e.printerId,e.type,e.text||'',e.category,e.fixText||'',e.timestamp||0,e.resolved===null||e.resolved===undefined?null:!!e.resolved,e.resolvedAt]));
+  dbInsertMany(q,'feedback',['id','type','text','timestamp'],(d.feedback||[]).map(e=>[e.id,e.type||'bug',e.text||'',e.timestamp||0]));
+  dbInsertMany(q,'orders',['id','sku_id','brand','material','color_name','went_low_at','ordered_at','received_at','status','settled'],(d.orderLog||[]).map(o=>[o.id,o.skuId,o.brand||'',o.material||'',o.colorName||'',o.wentLowAt,o.orderedAt,o.receivedAt,o.status||'pending',!!o.settled]));
+  dbInsertMany(q,'part_scan_log',['id','timestamp','part_id','label','delta','action_label','source','reverse_qty','undone'],(d.partsScanLog||[]).map(e=>[e.id,e.timestamp||0,e.partId,e.label||'',e.delta||0,e.actionLabel||'',e.source||'',e.reverse&&e.reverse.qty||0,!!e.undone]));
   const settings = d.settings || {};
-  tursoInsertMany(q,'app_settings',['key','value','updated_at'],[
+  dbInsertMany(q,'app_settings',['key','value','updated_at'],[
     ['defaultThreshold',String(settings.defaultThreshold === undefined ? 2 : settings.defaultThreshold),0],
     ['aiExtraContext',settings.aiExtraContext||'',settings.aiExtraContextUpdatedAt||0],
     ['seedBambuColorsV2',settings.seedBambuColorsV2?'1':'0',0]
@@ -2383,18 +2401,18 @@ function tursoResetRequests(d){
   const lists = { brands:settings.brands||[], materials:settings.materials||[], issueCategories:settings.issueCategories||[], printerGroups:settings.printerGroups||[], partCategories:settings.partCategories||[] };
   Object.keys(lists).forEach(kind=>lists[kind].forEach((value,i)=>listRows.push([kind,value,null,i])));
   (settings.colors||[]).forEach((c,i)=>listRows.push(['colors',c.name,c.hex,i]));
-  tursoInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows);
+  dbInsertMany(q,'setting_values',['kind','value','color_hex','sort_order'],listRows);
   return q;
 }
-async function tursoLoadData(){
+async function dbLoadData(){
   const selects = [
     `SELECT value FROM app_meta WHERE key='revision'`, 'SELECT * FROM app_settings', 'SELECT * FROM setting_values ORDER BY kind,sort_order',
     'SELECT * FROM skus','SELECT * FROM sku_barcodes ORDER BY sku_id,sort_order,barcode','SELECT * FROM parts','SELECT * FROM part_barcodes ORDER BY part_id,sort_order,barcode','SELECT * FROM inventory_events ORDER BY timestamp',
     'SELECT * FROM scan_log ORDER BY timestamp','SELECT * FROM printers','SELECT * FROM printer_log ORDER BY timestamp','SELECT * FROM feedback ORDER BY timestamp',
     'SELECT * FROM orders','SELECT * FROM part_scan_log ORDER BY timestamp'
   ];
-  const body = await tursoPipeline(selects.map(sql=>tursoStatement(sql)).concat({type:'close'}));
-  const rows = selects.map((_,i)=>tursoRows(body,i));
+  const body = await dbPipeline(selects.map(sql=>dbStatement(sql)).concat({type:'close'}));
+  const rows = selects.map((_,i)=>dbRows(body,i));
   const revision = rows[0][0] ? String(rows[0][0].value) : '0';
   const d = { skus:{}, events:[], settings:{}, scanLog:[], printers:{}, printerLog:[], feedback:[], orderLog:[], parts:{}, partsScanLog:[] };
   if(rows[1].length){
@@ -2404,20 +2422,20 @@ async function tursoLoadData(){
   rows[1].forEach(r=>{ if(r.key==='defaultThreshold') d.settings.defaultThreshold=Number(r.value); else if(r.key==='aiExtraContext'){ d.settings.aiExtraContext=r.value; d.settings.aiExtraContextUpdatedAt=r.updated_at||0; } else if(r.key==='seedBambuColorsV2') d.settings.seedBambuColorsV2=r.value==='1'; });
   const listMap = { brands:'brands',materials:'materials',issueCategories:'issueCategories',printerGroups:'printerGroups',partCategories:'partCategories' };
   rows[2].forEach(r=>{ if(r.kind==='colors'){ (d.settings.colors||(d.settings.colors=[])).push({name:r.value,hex:r.color_hex}); } else if(listMap[r.kind]){ (d.settings[listMap[r.kind]]||(d.settings[listMap[r.kind]]=[])).push(r.value); } });
-  rows[3].forEach(r=>{ d.skus[r.id]={ id:r.id,barcodes:[],brand:r.brand,material:r.material,colorName:r.color_name,colorHex:r.color_hex,boxCount:r.box_count,looseCount:r.loose_count,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:tursoBool(r.low_stock_disabled),targetStock:r.target_stock,weightPerBoxKg:r.weight_per_box_kg,purchaseUrl:r.purchase_url,location:r.location,notes:r.notes,favorite:tursoBool(r.favorite),ordered:tursoBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,lastVerifiedAt:r.last_verified_at,verifyCount:r.verify_count,createdAt:r.created_at,updatedAt:r.updated_at }; });
+  rows[3].forEach(r=>{ d.skus[r.id]={ id:r.id,barcodes:[],brand:r.brand,material:r.material,colorName:r.color_name,colorHex:r.color_hex,boxCount:r.box_count,looseCount:r.loose_count,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:dbBool(r.low_stock_disabled),targetStock:r.target_stock,weightPerBoxKg:r.weight_per_box_kg,purchaseUrl:r.purchase_url,location:r.location,notes:r.notes,favorite:dbBool(r.favorite),ordered:dbBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,lastVerifiedAt:r.last_verified_at,verifyCount:r.verify_count,createdAt:r.created_at,updatedAt:r.updated_at }; });
   rows[4].forEach(r=>{ if(d.skus[r.sku_id]) d.skus[r.sku_id].barcodes.push(r.barcode); });
-  rows[5].forEach(r=>{ d.parts[r.id]={ id:r.id,barcodes:[],name:r.name,mpn:r.mpn,category:r.category,models:r.models,description:r.description,notes:r.notes,location:r.location,purchaseUrl:r.purchase_url,qty:r.qty,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:tursoBool(r.low_stock_disabled),targetStock:r.target_stock,ordered:tursoBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,createdAt:r.created_at,updatedAt:r.updated_at }; });
+  rows[5].forEach(r=>{ d.parts[r.id]={ id:r.id,barcodes:[],name:r.name,mpn:r.mpn,category:r.category,models:r.models,description:r.description,notes:r.notes,location:r.location,purchaseUrl:r.purchase_url,qty:r.qty,lowStockThreshold:r.low_stock_threshold,lowStockDisabled:dbBool(r.low_stock_disabled),targetStock:r.target_stock,ordered:dbBool(r.ordered),orderedAt:r.ordered_at,lowSince:r.low_since,createdAt:r.created_at,updatedAt:r.updated_at }; });
   rows[6].forEach(r=>{ if(d.parts[r.part_id]) d.parts[r.part_id].barcodes.push(r.barcode); });
   d.events=rows[7].map(r=>{
-    const event={id:r.id,action:r.action,delta:r.delta,source:r.source,sample:tursoBool(r.sample),timestamp:r.timestamp};
+    const event={id:r.id,action:r.action,delta:r.delta,source:r.source,sample:dbBool(r.sample),timestamp:r.timestamp};
     if(r.sku_id !== null && r.sku_id !== undefined) event.skuId=r.sku_id;
     if(r.part_id !== null && r.part_id !== undefined) event.partId=r.part_id;
     return event;
   });
-  d.scanLog=rows[8].map(r=>({id:r.id,timestamp:r.timestamp,skuId:r.sku_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{boxCount:r.reverse_box_count,looseCount:r.reverse_loose_count},undone:tursoBool(r.undone)}));
+  d.scanLog=rows[8].map(r=>({id:r.id,timestamp:r.timestamp,skuId:r.sku_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{boxCount:r.reverse_box_count,looseCount:r.reverse_loose_count},undone:dbBool(r.undone)}));
   rows[9].forEach(r=>{ d.printers[r.id]={id:r.id,name:r.name,status:r.status,group:r.group_name,order:r.sort_order,lastServicedAt:r.last_serviced_at,createdAt:r.created_at,updatedAt:r.updated_at}; });
   d.printerLog=rows[10].map(r=>{
-    const entry={id:r.id,printerId:r.printer_id,type:r.type,text:r.text,timestamp:r.timestamp,resolved:r.resolved===null?null:tursoBool(r.resolved),resolvedAt:r.resolved_at};
+    const entry={id:r.id,printerId:r.printer_id,type:r.type,text:r.text,timestamp:r.timestamp,resolved:r.resolved===null?null:dbBool(r.resolved),resolvedAt:r.resolved_at};
     // category/fixText are subtype fields. Omitting an inapplicable SQL NULL
     // keeps the old JSON shape and, for issue/note records, lets the legacy
     // defaulting pass repair a genuinely missing category.
@@ -2426,14 +2444,14 @@ async function tursoLoadData(){
     return entry;
   });
   d.feedback=rows[11].map(r=>({id:r.id,type:r.type,text:r.text,timestamp:r.timestamp}));
-  d.orderLog=rows[12].map(r=>({id:r.id,skuId:r.sku_id,brand:r.brand,material:r.material,colorName:r.color_name,wentLowAt:r.went_low_at,orderedAt:r.ordered_at,receivedAt:r.received_at,status:r.status,settled:tursoBool(r.settled)}));
-  d.partsScanLog=rows[13].map(r=>({id:r.id,timestamp:r.timestamp,partId:r.part_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{qty:r.reverse_qty},undone:tursoBool(r.undone)}));
+  d.orderLog=rows[12].map(r=>({id:r.id,skuId:r.sku_id,brand:r.brand,material:r.material,colorName:r.color_name,wentLowAt:r.went_low_at,orderedAt:r.ordered_at,receivedAt:r.received_at,status:r.status,settled:dbBool(r.settled)}));
+  d.partsScanLog=rows[13].map(r=>({id:r.id,timestamp:r.timestamp,partId:r.part_id,label:r.label,delta:r.delta,actionLabel:r.action_label,source:r.source,reverse:{qty:r.reverse_qty},undone:dbBool(r.undone)}));
   ensureSettingsDefaults(d);
   return { json:d, sha:revision };
 }
 
 /* ---------- Share link ----------
-   Packs the current Turso connection (database URL/token) into the URL
+   Packs the current database connection (URL/token) into the URL
    fragment so someone new can open a link instead of typing both fields by
    hand. The fragment (everything after #) is never sent to any server —
    only this browser ever sees it — but it still IS the token in plain text,
@@ -2450,9 +2468,9 @@ function buildGhShareLink(){
   return location.href.split('#')[0] + '#connect=' + toBase64Url(utf8ToBase64(payload));
 }
 function copyGhShareLink(){
-  if(!hasGhConfig()){ toast('Connect to Turso first — the link is built from your current connection'); return; }
+  if(!hasGhConfig()){ toast('Connect to the database first — the link is built from your current connection'); return; }
   const proceed = confirm(
-    "This Base64-encoded link contains your Turso token. Anyone who has it can use the permissions granted to that token — treat it exactly like a password.\n\n" +
+    "This Base64-encoded link contains your database token. Anyone who has it can use the permissions granted to that token — treat it exactly like a password.\n\n" +
     "Only send it somewhere private, and consider using a separate database-scoped token per person so access can be revoked independently.\n\n" +
     "Copy the link now?"
   );
@@ -2484,8 +2502,8 @@ function consumeShareLinkIfPresent(){
   return { url: parsed.u, token: parsed.t };
 }
 async function ghFetchFile(){
-  await tursoEnsureSchema();
-  return tursoLoadData();
+  await dbEnsureSchema();
+  return dbLoadData();
 }
 /* ---------- Commit messages ----------
    The repo history is the audit trail and the real backup here, so a commit
@@ -2643,13 +2661,13 @@ async function ghSaveFile(){
   let baton = null;
   let transactionUrl = null;
   try{
-    const begun = await tursoPipeline([tursoStatement('BEGIN'),tursoStatement("SELECT value FROM app_meta WHERE key='revision'")]);
+    const begun = await dbPipeline([dbStatement('BEGIN'),dbStatement("SELECT value FROM app_meta WHERE key='revision'")]);
     baton = begun.baton;
     transactionUrl = begun.base_url || null;
-    const revisionRows = tursoRows(begun,1);
+    const revisionRows = dbRows(begun,1);
     const remoteRevision = revisionRows[0] ? String(revisionRows[0].value) : '0';
     if(String(ghSha === null ? '0' : ghSha) !== remoteRevision){
-      await tursoPipeline([tursoStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl);
+      await dbPipeline([dbStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl);
       baton = null;
       const conflict = new Error('Conflict'); conflict.type='conflict'; throw conflict;
     }
@@ -2662,9 +2680,9 @@ async function ghSaveFile(){
     // the live `data` as the new base afterwards would mark those edits as
     // already-synced and they would never be written at all.
     const sentVersion = ghDataVersion;
-    const requests = tursoDeltaRequests(base,data);
+    const requests = dbDeltaRequests(base,data);
     const snapshot = JSON.stringify(data);
-    requests.push(tursoStatement("INSERT INTO app_meta(key,value) VALUES('revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[nextRevision]));
+    requests.push(dbStatement("INSERT INTO app_meta(key,value) VALUES('revision',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[nextRevision]));
     // Long pipelines (a first full sync, or a restored backup) can exceed what
     // a single HTTP request will carry, so send them in chunks over the same
     // open transaction. The COMMIT rides along with the final chunk.
@@ -2672,8 +2690,8 @@ async function ghSaveFile(){
     for(let start=0; start<requests.length; start+=CHUNK){
       const chunk = requests.slice(start,start+CHUNK);
       const isLast = start + CHUNK >= requests.length;
-      if(isLast) chunk.push(tursoStatement('COMMIT'),{type:'close'});
-      const written = await tursoPipeline(chunk,baton,transactionUrl);
+      if(isLast) chunk.push(dbStatement('COMMIT'),{type:'close'});
+      const written = await dbPipeline(chunk,baton,transactionUrl);
       baton = isLast ? null : written.baton;
       transactionUrl = written.base_url || transactionUrl;
     }
@@ -2685,7 +2703,7 @@ async function ghSaveFile(){
     // baton that reaches it.
     if(err && err.body && err.body.baton) baton = err.body.baton;
     if(baton){
-      try{ await tursoPipeline([tursoStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl); }catch(ignore){}
+      try{ await dbPipeline([dbStatement('ROLLBACK'),{type:'close'}],baton,transactionUrl); }catch(ignore){}
     }
     throw err;
   }
@@ -2767,15 +2785,15 @@ async function flushGithubSave(){
     if(err.type === 'conflict'){
       await handleSyncConflict();
     } else if(err.type === 'auth'){
-      toast('Turso rejected the saved token — open Settings to fix it');
+      toast('The database rejected the saved token — open Settings to fix it');
       // Keep a slow retry alive so a token that is fixed (or a transient 401)
       // resumes syncing on its own rather than waiting for the next edit.
       clearTimeout(ghSaveTimer);
       ghSaveTimer = setTimeout(flushGithubSave, 60000);
     } else {
-      console.error('Turso sync failed',err);
+      console.error('Database sync failed',err);
       const detail=String(err&&err.message||'unknown error').replace(/\s+/g,' ').slice(0,120);
-      toast('Could not sync to Turso ('+detail+') — retrying shortly. Your changes are safe locally.',8000);
+      toast('Could not sync to the database ('+detail+') — retrying shortly. Your changes are safe locally.',8000);
       clearTimeout(ghSaveTimer);
       ghSaveTimer = setTimeout(flushGithubSave, 15000);
     }
@@ -2789,11 +2807,11 @@ async function ghConditionalCheck(){
   // Cheap revision query before pulling all SQL tables.
   if(!hasGhConfig() || !ghSha) return null;
   try{
-    const body = await tursoPipeline([tursoStatement("SELECT value FROM app_meta WHERE key='revision'"),{type:'close'}]);
-    const found = tursoRows(body,0);
+    const body = await dbPipeline([dbStatement("SELECT value FROM app_meta WHERE key='revision'"),{type:'close'}]);
+    const found = dbRows(body,0);
     const revision = found[0] ? String(found[0].value) : '0';
     if(revision === String(ghSha)) return { changed:false };
-    const remote = await tursoLoadData();
+    const remote = await dbLoadData();
     return { changed:true, json:remote.json, sha:remote.sha };
   }catch(e){ return null; }
 }
@@ -2813,7 +2831,7 @@ function applyFreshRemoteData(remote, message){
   if(message) toast(message);
 }
 
-/* ---------- Three-way merge (base = last synced, local = this browser, remote = Turso) ----------
+/* ---------- Three-way merge (base = last synced, local = this browser, remote = database) ----------
    Used when a save conflicts because someone else saved first. Instead of
    throwing away local changes, combine both sides:
    - log arrays (events / scanLog / printerLog): union by id; entries that were
@@ -3076,7 +3094,7 @@ async function resolveSyncConflict(){
 async function pollGhStaleness(){
   if(!hasGhConfig() || ghSaveInFlight) return;
   if(!ghSha){
-    // No revision yet: we booted offline from the local copy. Try Turso again.
+    // No revision yet: we booted offline from the local copy. Try the database again.
     if(ghDirty) return; // the pending save will reconcile via its conflict path
     ghCheckingInFlight = true;
     updateSyncStatusUI();
@@ -3135,17 +3153,17 @@ async function refreshFromGithub(){
     if(!confirm('You have unsaved changes. Refreshing will replace them with the latest shared version. Continue?')) return;
   }
   if(pendingFreshRemote){
-    applyFreshRemoteData(pendingFreshRemote, 'Refreshed from Turso');
+    applyFreshRemoteData(pendingFreshRemote, 'Refreshed from the database');
     pendingFreshRemote = null;
     return;
   }
   try{
     const remote = await ghFetchFile();
-    applyFreshRemoteData(remote, 'Refreshed from Turso');
+    applyFreshRemoteData(remote, 'Refreshed from the database');
   }catch(e){ toast('Could not refresh — try again'); }
 }
 async function manualGhSync(){
-  if(!hasGhConfig()){ toast('Connect to Turso in Settings first'); return; }
+  if(!hasGhConfig()){ toast('Connect to the database in Settings first'); return; }
   if(ghSaveInFlight || ghCheckingInFlight) return;
   clearTimeout(ghSaveTimer);
   if(ghDirty){
@@ -3171,17 +3189,17 @@ async function manualGhSync(){
 function renderGhGateSetup(isChange){
   const body = document.getElementById('ghGateBody');
   body.innerHTML = `
-    <div class="field"><label>Turso database URL</label><input type="url" id="ghs_url" placeholder="libsql://database-organization.turso.io" value="${escapeHtml(ghConfig.url||'')}"></div>
-    <div class="field"><label>Turso database token <span style="font-weight:400;">(database-scoped, read/write)</span></label><input type="password" id="ghs_token" placeholder="eyJ..." value=""></div>
+    <div class="field"><label>Database URL</label><input type="url" id="ghs_url" placeholder="Database endpoint URL" value="${escapeHtml(ghConfig.url||'')}"></div>
+    <div class="field"><label>Database token <span style="font-weight:400;">(database-scoped, read/write)</span></label><input type="password" id="ghs_token" placeholder="eyJ..." value=""></div>
     <div class="form-actions" style="justify-content:space-between;">
       ${isChange ? '<button class="btn" onclick="closeGhGateIfConfigured()">Cancel</button>' : '<span></span>'}
       <button class="btn primary" onclick="saveGhSetupForm()">Connect</button>
     </div>
-    <p class="footer-note" style="margin-bottom:0;">The URL and token are stored only in this browser's local storage. First connection creates the SQL schema automatically, so the token must initially allow schema changes.</p>
+    <p class="footer-note" style="margin-bottom:0;">The URL and token are stored only in this browser's local storage. First connection creates the database schema automatically, so the token must initially allow schema changes.</p>
   `;
 }
 function renderGhGateLoading(){
-  document.getElementById('ghGateBody').innerHTML = `<div style="text-align:center;padding:10px 0;"><div class="gh-spinner"></div><div class="footer-note" style="margin:0;">Connecting to Turso and loading SQL data…</div></div>`;
+  document.getElementById('ghGateBody').innerHTML = `<div style="text-align:center;padding:10px 0;"><div class="gh-spinner"></div><div class="footer-note" style="margin:0;">Connecting to the database and loading data…</div></div>`;
 }
 function renderGhGateError(message, showChangeLink){
   document.getElementById('ghGateBody').innerHTML = `
@@ -3212,8 +3230,8 @@ function openGhConnectionModal(){
 function saveGhSetupForm(){
   const url = document.getElementById('ghs_url').value.trim();
   const token = document.getElementById('ghs_token').value.trim();
-  if(!url || !token){ toast('Fill in the Turso URL and token'); return; }
-  if(!/^(libsql|turso|https):\/\//i.test(url)){ toast('Use the full Turso database URL'); return; }
+  if(!url || !token){ toast('Fill in the database URL and token'); return; }
+  if(!/^[a-z][a-z0-9+.\-]*:\/\/[^\s\/]+/i.test(url)){ toast('Use the full database URL, including the scheme'); return; }
   ghConfig = { url, token };
   saveGhConfigToStorage();
   ghSha = null;
@@ -3264,7 +3282,7 @@ async function initApp(){
     const remote = await ghFetchFile();
     const cache = loadLocalCache();
     if(localCacheWasDirty() && cache){
-      // The last session ended with changes that never reached Turso
+      // The last session ended with changes that never reached the database
       // (tab closed too quickly, or offline). Merge them in rather than lose them.
       try{
         const base = ghBaseJson ? JSON.parse(ghBaseJson) : null;
@@ -3287,10 +3305,10 @@ async function initApp(){
       else data = freshDataSkeleton();
       ghSha = null;
     } else if(err.type === 'auth'){
-      renderGhGateError('Turso rejected this token. Check that it is a database token with read/write and schema access, then reconnect.', true);
+      renderGhGateError('The database rejected this token. Check that it is a database-scoped token with read/write and schema access, then reconnect.', true);
       return;
     } else if(err.type === 'network'){
-      // Turso unreachable — fall back to this browser's local copy and keep
+      // Database unreachable — fall back to this browser's local copy and keep
       // retrying in the background instead of blocking the whole app.
       const cache = loadLocalCache();
       if(cache){
@@ -3305,14 +3323,14 @@ async function initApp(){
         syncAskAiExtraContextField();
         if(migratedOffline) saveData();
         setSyncIndicatorState('error', 'Offline — local copy');
-        toast("Couldn't reach Turso — using this device's last local copy. Will keep retrying.");
+        toast("Couldn't reach the database — using this device's last local copy. Will keep retrying.");
         startGhPolling();
         return;
       }
-      renderGhGateError('Could not reach Turso. Check your connection and retry.', true);
+      renderGhGateError('Could not reach the database. Check your connection and retry.', true);
       return;
     } else {
-      renderGhGateError('Something went wrong talking to Turso (' + err.message + ').', true);
+      renderGhGateError('Something went wrong talking to the database (' + err.message + ').', true);
       return;
     }
   }
@@ -4338,21 +4356,21 @@ function removeSettingsItem(type, index){
 
 /* ---------- Database Health ----------
    Purely informational — everything here reads the already-loaded `data`
-   object and this browser's own recent sync timings. No extra Turso
+   object and this browser's own recent sync timings. No extra database
    requests, no writes, nothing scheduled.
 
-   What this panel is actually watching, now that the data lives in Turso
-   rather than in one JSON file on GitHub:
+   What this panel is actually watching, now that the data lives in SQL tables
+   rather than in one JSON file:
 
    - Saves are deltas, so the size of `data` no longer affects how much a
-     scan costs to write. It still affects LOAD time, because tursoLoadData
+     scan costs to write. It still affects LOAD time, because dbLoadData
      does SELECT * across every table and rebuilds the whole object.
    - The only hard ceiling left is this browser's localStorage quota (~5 MB
      per origin). The app keeps TWO full copies of `data` there — the working
      cache and the last-synced base used for three-way merges — plus Ask AI
      chat and usage history. If that quota is hit, saveLocalCache() fails
      silently and offline recovery stops working, so it is worth a gauge.
-   - Turso's own free-plan metering counts ROWS read and written. A full load
+   - Hosted-database metering counts ROWS read and written. A full load
      reads every row of every table, so the row total below is the number that
      maps to that quota — not the kilobyte figures. */
 const SYNC_PERF_KEY = 'syncPerfHistory_v1';
@@ -4419,8 +4437,8 @@ function localStorageBytes(){
     return chars * 2;
   }catch(e){ return null; }
 }
-// Exactly what tursoLoadData pulls down on a cold start, table by table. This
-// is the unit Turso's plan limits are counted in.
+// Exactly what dbLoadData pulls down on a cold start, table by table. This
+// is the unit the database plan limits are counted in.
 function rowsPerLoad(){
   const s = data.settings || {};
   const listRows = ['brands','materials','issueCategories','printerGroups','partCategories']
@@ -4475,7 +4493,7 @@ function computeDbHealth(){
   // delta save costs the same whether `data` is 100 KB or 3 MB.
   const cacheTier = cacheBytes === null ? 0 : cachePct < 40 ? 0 : cachePct < 60 ? 1 : cachePct < 80 ? 2 : 3;
   // Calibrated for a hosted database reached over HTTP, which is what this is:
-  // a save is two round trips to Turso, so a second of total latency is normal
+  // a save is two round trips to the database, so a second of total latency is normal
   // for a shared free-tier instance in another region, not a warning sign.
   const syncTier = avgSyncMs === null ? 0 : avgSyncMs < 1500 ? 0 : avgSyncMs < 2500 ? 1 : avgSyncMs < 4000 ? 2 : 3;
   const sectionTier = largestPct >= 70 ? 1 : 0;
@@ -6659,7 +6677,7 @@ function importData(event){
     try{
       const parsed = JSON.parse(e.target.result);
       if(!parsed.skus) throw new Error('bad shape');
-      if(confirm('Import will replace the shared Turso data for everyone, not just this computer. Continue?')){
+      if(confirm('Import will replace the shared database for everyone, not just this computer. Continue?')){
         ensureSettingsDefaults(parsed);
         data = parsed;
         saveData(); renderAll(); refreshAllDropdownSources();
@@ -6672,7 +6690,7 @@ function importData(event){
   event.target.value = '';
 }
 function clearAllData(){
-  const typed = prompt("This clears every filament and every scan in the shared Turso database for everyone. This can't be undone.\n\nType DELETE to confirm:");
+  const typed = prompt("This clears every filament and every scan in the shared database for everyone. This can't be undone.\n\nType DELETE to confirm:");
   if(typed !== 'DELETE') return;
   data = { skus:{}, events:[], settings:{} };
   ensureSettingsDefaults(data);
@@ -6696,7 +6714,7 @@ function resetAllLooseCounts(){
 
 /* ---------- Ask AI ----------
    A chat box wired to the Claude API. The API key lives ONLY in this browser's
-   localStorage (never in `data`, so it never syncs to Turso or to other
+   localStorage (never in `data`, so it never syncs to the database or to other
    people). Every question is sent with a fresh snapshot of the inventory,
    the printers, and whatever the current page is showing. */
 const ASKAI_CONFIG_KEY = 'askai_config_v1';
@@ -6721,7 +6739,7 @@ function hasAskAiKey(){ return !!(askAiConfig.key && askAiConfig.key.trim()); }
 
 /* ----- Extra context (shared) -----
    Unlike the API key, this is stored in `data.settings` and therefore syncs to
-   Turso, so everyone using the same database shares one set of background notes.
+   the database, so everyone using the same database shares one set of background notes.
    Only two limits, both practical rather than arbitrary:
      - HARD cap prevents accidentally sending an enormous document with every request.
      - SOFT threshold is just a cost heads-up: this text is sent with every
@@ -7027,7 +7045,7 @@ function saveAskAiExtraContext(){
   data.settings.aiExtraContextUpdatedAt = Date.now();
   el.value = val;
   askAiExtraContextShown = val;
-  saveData();            // writes the local cache and syncs to Turso for everyone
+  saveData();            // writes the local cache and syncs to the database for everyone
   updateAskAiExtraContextMeta();
   toast(val ? 'Extra context saved — shared with everyone on this database' : 'Extra context cleared for everyone');
 }

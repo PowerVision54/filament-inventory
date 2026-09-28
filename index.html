@@ -837,7 +837,7 @@
       <span class="brand-mark"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
       <h1>3D PRINTER FILAMENT INVENTORY</h1>
     </div>
-    <div class="sub">V0.28</div>
+    <div class="sub">V0.29</div>
   </div>
 </header>
 
@@ -2719,6 +2719,14 @@ function setSyncIndicatorState(state, label){
   const labels = { idle:'Not connected', checking:'Checking…', syncing:'Syncing…', synced:'Synced', error:'Sync error' };
   text.textContent = label || labels[state] || state;
 }
+// Status lines name the database, not the endpoint: the first label of the
+// host is the database's own name, while the rest of the domain only says who
+// hosts it. Keeps "which database am I on?" answerable without putting the
+// provider in the interface.
+function dbDisplayName(){
+  const host = String(ghConfig.url || '').replace(/^[a-z][a-z0-9+.\-]*:\/\//i,'').replace(/[\/?#].*$/,'');
+  return host.split('.')[0] || 'the shared database';
+}
 function updateSyncStatusUI(){
   const el = document.getElementById('ghSyncStatusText');
   if(!hasGhConfig()){
@@ -2726,7 +2734,7 @@ function updateSyncStatusUI(){
     setSyncIndicatorState('idle');
     return;
   }
-  const where = String(ghConfig.url || '').replace(/^\w+:\/\//,'');
+  const where = dbDisplayName();
   if(ghSaveInFlight){
     if(el) el.textContent = 'Syncing… (' + where + ')';
     setSyncIndicatorState('syncing');
